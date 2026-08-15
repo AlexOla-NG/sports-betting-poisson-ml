@@ -1,40 +1,29 @@
-# config/config.yaml
-# Central hyperparameter and configuration file for the sports betting pipeline.
-# All rolling windows, weights, and tuning knobs live here — never hardcoded.
+# src/config/config.yaml (canonical config for src package)
+# This mirrors the repo-root `config/config.yaml` and is kept to satisfy IDE
+# quick-open semantics for in-repo imports. Prefer editing `config/config.yaml`.
 
 data:
-  # Which league and seasons to pull by default
-  default_league_id: 47  # FotMob ID for Premier League
+  default_league_id: 47
   seasons:
     - "2024/2025"
     - "2025/2026"
 
-  # Data paths (relative to repo root)
   raw_data_dir: "data/raw"
   processed_data_dir: "data/processed"
 
 ratings:
-  # Poisson rating model settings
   home_field_advantage: true
-
-  # Rolling window for attack/defense ratings (number of matches)
-  # Treat as hyperparameter: sweep 5-10 in backtesting
   rating_window: 8
 
 form:
-  # Rolling windows for form features (points, goals)
-  # Shorter window: form is noisy, so react faster
   points_window: 5
   goals_window: 5
 
 xg:
-  # Rolling windows for xG features
-  # Slightly longer window: xG is lower-variance, benefits from more data
   xg_for_window: 8
   xg_against_window: 8
 
 injury:
-  # Injury/absence adjustment weights (to be tuned empirically)
   positional_weights:
     goalkeeper: 1.4
     centre_back: 1.3
@@ -43,24 +32,14 @@ injury:
     central_mid: 1.2
     winger: 1.0
     striker: 1.1
-
-  # Decay factor for injury impact over matches
-  # Match 1: full penalty, Match 2: decay^1, Match 3: decay^2, etc.
   injury_decay: 0.7
-
-  # Minimum matches before we trust "team without player X" empirical data
-  # over static player-value subtraction
   min_absence_matches: 3
 
 monte_carlo:
-  # Number of simulation trials per fixture
   num_trials: 10000
-
-  # Random seed for reproducibility (change to test robustness)
   random_seed: 42
 
 ml:
-  # XGBoost hyperparameters (starting point, to be tuned)
   xgboost:
     max_depth: 4
     learning_rate: 0.05
@@ -71,17 +50,18 @@ ml:
     gamma: 0.1
     reg_alpha: 0.1
     reg_lambda: 1.0
-
-  # Ensemble blend weights (Poisson/Monte Carlo vs XGBoost)
-  # These should be tuned on a validation set, not hardcoded long-term
   ensemble_weights:
     poisson_mc: 0.5
     xgboost: 0.5
 
 evaluation:
-  # Target Brier score benchmark (for monitoring, not a hard constraint)
   target_brier_score: 0.20
+  initial_train_size: 200
+  step_size: 38
 
-  # Walk-forward validation settings
-  initial_train_size: 200  # matches
-  step_size: 38  # approx one EPL gameweek
+ingestion:
+  fotmob:
+    base_url: "https://api.fotmob.com"
+    retry:
+      attempts: 3
+      backoff_factor: 1.0
