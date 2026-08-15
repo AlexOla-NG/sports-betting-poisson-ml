@@ -4,6 +4,7 @@
 - Add `scripts/agent_customize_checks.py` and GitHub Actions workflow to run checks
 
 Rationale: Ensure agent customization files follow repository conventions and are validated by CI before merging.
+
 # Design Justification Log
 
 This file records every significant design decision, the alternatives
@@ -156,24 +157,6 @@ navigate nested dicts everywhere.
 
 ---
 
-## Template for Future Entries
-
-```
-## YYYY-MM-DD — [Decision Title]
-
-**Decision:** ...
-
-**Alternatives considered:**
-- ...
-
-**Rationale:** ...
-
-**Sources (if applicable):**
-- ...
-```
-
----
-
 ## 2026-08-15 — Add AGENTS.md and GitHub copilot instructions
 
 **Decision:** Add a top-level `AGENTS.md` and a `.github/copilot-instructions.md`
@@ -191,3 +174,24 @@ are present and referenced by `README.md` and `src/config/JUSTIFICATION.md`.
 violations of project constraints (notebooks-first, no hardcoded windows,
 walk-forward validation). The check script provides a lightweight CI hook
 maintainers can run to ensure agent docs are present and referenced.
+
+---
+
+## 2026-08-15 — FotMob Ingestion: Parquet + Retry Strategy
+
+**Decision:** Save raw ingestion outputs as Parquet files and implement a simple
+retry-with-backoff strategy for FotMob API calls.
+
+**Alternatives considered:**
+- JSON/NDJSON files — rejected: slower I/O for tabular analytics and larger on-disk
+  footprint for repeated experimental runs.
+- Storing raw responses in a DB (SQLite/Postgres) — rejected for early-stage work
+  to avoid ops complexity; revisit when dataset size or concurrency demands it.
+
+**Rationale:** Parquet is columnar, compact, and fast to read with `pandas` and
+other analytics tools; it supports schema evolution and avoids repeated JSON
+parsing during iterative development. A simple retry/backoff (3 attempts,
+exponential backoff) balances resilience against transient network/API issues
+while keeping the client implementation lightweight and testable. The retry
+config will live in `config/config.yaml` so it can be tuned without code
+changes.

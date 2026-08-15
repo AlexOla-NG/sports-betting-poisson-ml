@@ -9,33 +9,43 @@ from typing import Any
 import yaml
 
 
-def load_config(config_path: str = "config/config.yaml") -> dict[str, Any]:
-    """
-    Load the central configuration file.
+def load_config(config_path: str | None = None) -> dict[str, Any]:
+    """Load the central configuration file.
+
+    Behavior:
+    - If `config_path` is provided, try that path relative to repo root.
+    - Otherwise, prefer `src/config/config.yaml`, then fall back to
+      `config/config.yaml` for backward compatibility.
 
     Parameters
     ----------
-    config_path : str
-        Path to the YAML config file, relative to repo root.
+    config_path : str | None
+        Optional path to the YAML config file, relative to repo root.
 
     Returns
     -------
     dict[str, Any]
         Nested dictionary of configuration values.
-
-    Notes
-    -----
-    This function belongs to the config stage of the pipeline.
-    All other stages should import this and read values from the returned dict.
     """
     repo_root = Path(__file__).resolve().parents[2]
-    full_path = repo_root / config_path
 
-    if not full_path.exists():
-        raise FileNotFoundError(f"Config file not found: {full_path}")
+    candidates = []
+    if config_path:
+        candidates.append(repo_root / config_path)
+    else:
+        candidates.append(repo_root / "src/config/config.yaml")
+        candidates.append(repo_root / "config/config.yaml")
 
-    with open(full_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    tried = []
+    for path in candidates:
+        tried.append(str(path))
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+    raise FileNotFoundError(
+        "Config file not found. Tried: " + ", ".join(tried)
+    )
 
 
 # Convenience accessors for commonly-used values
