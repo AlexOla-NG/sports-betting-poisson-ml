@@ -1,6 +1,6 @@
 """
 Central configuration loader for the sports betting pipeline.
-All hyperparameters and tuning knobs are read from config/config.yaml.
+All hyperparameters and tuning knobs are read from src/config/config.yaml.
 Never hardcode window lengths, weights, or other magic numbers in code.
 """
 
@@ -14,8 +14,7 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
 
     Behavior:
     - If `config_path` is provided, try that path relative to repo root.
-    - Otherwise, prefer `src/config/config.yaml`, then fall back to
-      `config/config.yaml` for backward compatibility.
+    - Otherwise, prefer `src/config/config.yaml`.
 
     Parameters
     ----------
@@ -34,7 +33,6 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
         candidates.append(repo_root / config_path)
     else:
         candidates.append(repo_root / "src/config/config.yaml")
-        candidates.append(repo_root / "config/config.yaml")
 
     tried = []
     for path in candidates:

@@ -1,6 +1,4 @@
 # src/config/config.yaml (canonical config for src package)
-# This mirrors the repo-root `config/config.yaml` and is kept to satisfy IDE
-# quick-open semantics for in-repo imports. Prefer editing `config/config.yaml`.
 
 data:
   default_league_id: 47

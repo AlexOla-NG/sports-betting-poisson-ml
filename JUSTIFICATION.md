@@ -49,7 +49,7 @@ implementations for football outcome prediction.
 ## 2026-08-15 — Rolling Window Lengths: Tunable Hyperparameters
 
 **Decision:** Rolling window lengths for form and xG features are not
-hardcoded; they live in `config/config.yaml` and are treated as hyperparameters.
+hardcoded; they live in `src/config/config.yaml` and are treated as hyperparameters.
 
 **Alternatives considered:**
 - Fixed windows (5 for form, 8 for xG) based on literature priors — rejected
@@ -138,7 +138,7 @@ truth that the model can't accidentally edit or ignore.
 
 ---
 
-## 2026-08-15 — Centralized Configuration (config/config.yaml)
+## 2026-08-15 — Centralized Configuration (src/config/config.yaml)
 
 **Decision:** All hyperparameters (rolling windows, injury weights, XGBoost
 params, ensemble weights, Monte Carlo trials) live in a single YAML file,
@@ -193,5 +193,5 @@ other analytics tools; it supports schema evolution and avoids repeated JSON
 parsing during iterative development. A simple retry/backoff (3 attempts,
 exponential backoff) balances resilience against transient network/API issues
 while keeping the client implementation lightweight and testable. The retry
-config will live in `config/config.yaml` so it can be tuned without code
+config will live in `src/config/config.yaml` so it can be tuned without code
 changes.

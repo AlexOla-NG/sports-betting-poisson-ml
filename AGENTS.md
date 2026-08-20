@@ -4,7 +4,7 @@ Purpose: provide concise, actionable instructions to AI coding agents working in
 
 Quick links
 - CONVENTIONS: [CONVENTIONS.md](CONVENTIONS.md)
-- Config: [config/config.yaml](config/config.yaml)
+- Config: [src/config/config.yaml](src/config/config.yaml)
 - Notebooks: `notebooks/` (one notebook per pipeline stage)
 - Shared code: `src/`
 - GitHub/Copilot guidance: [.github/copilot-instructions.md](.github/copilot-instructions.md)
@@ -30,13 +30,13 @@ Agent behavior: do this
 - Always update `README.md` and `CONVENTIONS.md` when scope or structure changes.
 
 Agent behavior: do NOT do this
-- Do not hardcode hyperparameters (window lengths, etc.) — read them from `config/config.yaml`.
+- Do not hardcode hyperparameters (window lengths, etc.) — read them from `src/config/config.yaml`.
 - Do not commit large data files under `data/` — data is gitignored.
 - Do not run or commit live API credentials. Mark live-API notebook cells with `#NBVAL_SKIP` or `#NBVAL_IGNORE_OUTPUT`.
 - Do not modify `CONVENTIONS.md` without discussing with the maintainer; it's used as persistent AI context.
 
 Where to look first
-- Start with [CONVENTIONS.md](CONVENTIONS.md) and `config/config.yaml` for hyperparameter and pipeline rules.
+- Start with [CONVENTIONS.md](CONVENTIONS.md) and `src/config/config.yaml` for hyperparameter and pipeline rules.
 - For tests and examples, inspect `tests/` and `notebooks/`.
 
 If you plan to add new agent customizations (skills, prompts, hooks)
@@ -45,3 +45,126 @@ If you plan to add new agent customizations (skills, prompts, hooks)
 - Add a short JUSTIFICATION.md entry describing the customization and rationale.
 
 If you have questions or want to propose additional agent hooks, ask the maintainer and include a short justification entry for `src/config/JUSTIFICATION.md`.
+
+---
+
+## Quick Workflow: Adding a New Pipeline Stage
+
+If you need to add a new stage (beyond the current 7):
+
+1. **Create the notebook directory** (respecting 01-prefix ordering):
+   ```bash
+   mkdir -p notebooks/NN_stagename/
+   ```
+
+2. **Create the shared module** (if needed):
+   ```bash
+   mkdir -p src/stagename/
+   touch src/stagename/__init__.py
+   touch src/stagename/module.py
+   ```
+
+3. **Create a matching test file**:
+   ```bash
+   mkdir -p tests/stagename/
+   touch tests/stagename/test_module.py
+   ```
+
+4. **Notebook structure** (see [01_fotmob_ingest.ipynb](notebooks/01_ingestion/01_fotmob_ingest.ipynb) as template):
+   - Top markdown cell: stage name, inputs, outputs
+   - Section headers: Load Data → Transform → Validate
+   - Save to `data/processed/{stage_name}/` as Parquet
+   - Mark live API / non-deterministic cells with `#NBVAL_SKIP`
+
+5. **Update JUSTIFICATION.md**:
+   ```
+   ## YYYY-MM-DD — [Stage Name]
+   **Decision:** Why this stage exists, what it does
+   **Rationale:** Why this stage is necessary for the pipeline
+   ```
+
+6. **Update README.md** with new stage in repo structure diagram
+
+---
+
+## Quick Reference: Loading Config & Rolling Windows
+
+Use this pattern in notebooks and src/ modules:
+
+```python
+from src.config.loader import load_config, get_rating_window, get_form_windows
+
+config = load_config()
+
+# Single parameter
+rating_window = get_rating_window(config)  # e.g., 8
+
+# Multiple parameters  
+points_window, goals_window = get_form_windows(config)  # e.g., (5, 5)
+
+# Direct access to full config dict
+xg_for_window = config['xg']['xg_for_window']
+```
+
+Never hardcode these values. Always read from config.yaml.
+
+---
+
+## Common Pitfalls: Data Leakage & Row Structure
+
+**❌ DO NOT do this:**
+
+```python
+# BAD: feature uses current match's own outcome
+df['home_xg_trend'] = df['home_xg'].rolling(5).mean()  # No .shift()!
+
+# BAD: two rows per fixture (doubles dataset, violates row structure)
+df = df.melt(id_vars=['fixture_id', ...], var_name='team', ...)
+
+# BAD: hardcoded window length
+df['form'] = df.groupby('team')['points'].rolling(5).mean()
+```
+
+**✅ DO this:**
+
+```python
+# GOOD: .shift(1) ensures point-in-time correctness
+df['home_xg_trend'] = df.sort_values('fixture_date').groupby('home_team')['home_xg'].transform(lambda x: x.rolling(5).mean().shift(1))
+
+# GOOD: one row per fixture, home-away DIFF features
+df['xg_diff'] = df['home_xg'] - df['away_xg']
+
+# GOOD: load window from config, never hardcode
+window = get_form_windows(config)[0]
+df['form'] = df.groupby('team')['points'].transform(lambda x: x.rolling(window).mean().shift(1))
+```
+
+---
+
+## Notebook Testing: `#NBVAL_SKIP` & Output Validation
+
+- `#NBVAL_SKIP` cells are **skipped entirely** during `pytest --nbval-lax` runs
+  - Use for: live API calls, manual exploration, non-deterministic randomness
+  - Example:
+    ```python
+    # NBVAL_SKIP
+    df = client.fetch_fixtures(...)  # live API call
+    ```
+
+- `#NBVAL_IGNORE_OUTPUT` cells **execute** but output is not validated
+  - Use for: cells where output legitimately changes (e.g., new data added)
+  - Example:
+    ```python
+    # NBVAL_IGNORE_OUTPUT
+    ratings_df.to_parquet(...)  # row count changes each season
+    print(f"Saved {len(ratings_df)} rows")
+    ```
+
+- No marker: output is validated to match saved notebook state
+  - Use for: deterministic logic, assertions, static data checks
+
+Run tests locally before pushing:
+```bash
+pytest --nbval-lax  # Validate all notebooks
+pytest -q           # Unit tests only
+```
