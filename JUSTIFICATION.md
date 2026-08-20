@@ -13,6 +13,28 @@ whenever a new feature is added or an existing design changes.
 
 ---
 
+## 2026-08-20 — FotMob Ingestion Pipeline Implementation
+
+**Decision:** Implement FotMob API ingestion with separate Parquet tables (fixtures, match_stats, player_minutes), exponential backoff retry logic, single-season initial scope, and notebook-driven orchestration.
+
+**Alternatives considered:**
+1. Single denormalized table (all fixtures + stats + minutes flattened): Rejected because it would require duplicating fixture data for each match stat/minute record, increasing storage and making it harder to update any one table independently.
+2. Database (SQLite/PostgreSQL) instead of Parquet: Rejected because Parquet is simpler for a single-developer ML pipeline, works well with pandas, and avoids deployment complexity.
+3. Linear retry (fixed delay) instead of exponential backoff: Rejected because exponential backoff is the industry standard for API resilience; avoids overwhelming the server if the API is struggling.
+4. Multi-season ingestion in one notebook run: Rejected for now; single-season keeps initial implementation simple and allows debugging of one season at a time.
+5. Python script (not notebook) for ingestion: Rejected because notebooks allow interactive exploration, easier debugging of data issues, and align with the project's narrative-driven pipeline approach per CONVENTIONS.md.
+
+**Rationale:**
+- **Separate tables:** One row per fixture (or match stat row, or player minute row) avoids data duplication and allows independent updates. Fetching is also faster and clearer.
+- **Parquet format:** Efficient compression, native pandas support, and self-describing schema. Ideal for iterative ML development.
+- **Exponential backoff + retry:** FotMob API occasionally rate-limits; retries with backoff handle transient failures without manual intervention.
+- **Notebook-first:** Aligns with project structure (7-stage pipeline of notebooks); allows downstream stages to load `data/raw/` Parquet as input.
+- **Single season:** 2024/2025 season only (for now). Simplifies initial development; multi-season loop can be added later if needed.
+- **Error logging + continue:** If a single fixture fails, log and move on rather than halting the entire ingestion. Critical errors (no fixtures at all, auth failure) still fail fast.
+
+---
+
+
 ## 2026-08-15 — League & Season Scope
 
 **Decision:** Start with EPL only, 2 historical seasons.

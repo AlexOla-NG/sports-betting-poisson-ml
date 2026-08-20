@@ -48,6 +48,40 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
 
 # Convenience accessors for commonly-used values
 
+    def get_rating_window(config: dict[str, Any]) -> int:
+        """Get the rolling window length for rating calculations.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration dictionary from load_config().
+
+        Returns
+        -------
+        int
+            Number of matches to use for rolling rating calculations.
+        """
+        return config["ratings"]["rating_window"]
+
+
+    def get_form_windows(config: dict[str, Any]) -> tuple[int, int]:
+        """Get the rolling window lengths for form (points and goals).
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration dictionary from load_config().
+
+        Returns
+        -------
+        tuple[int, int]
+            (points_window, goals_window) — rolling windows for form calculations.
+        """
+        return (
+            config["form"]["points_window"],
+            config["form"]["goals_window"],
+        )
+
 def get_rating_window(config: dict[str, Any]) -> int:
     """Return the rolling window for Poisson attack/defense ratings."""
     return config["ratings"]["rating_window"]

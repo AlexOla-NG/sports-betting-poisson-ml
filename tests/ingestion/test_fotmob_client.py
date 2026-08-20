@@ -52,5 +52,83 @@ def test_fetch_player_minutes_returns_dataframe():
     session = DummySession({"player_minutes": DummyResponse(sample)})
     client = FotMobClient(session=session, retry=RetryConfig(attempts=1))
     df = client.fetch_player_minutes(fixture_id=555)
+
+
+    def test_fetch_fixtures_with_retry():
+        """Test retry logic on transient failures (retries after initial 500)."""
+        attempts_made = [0]
+    
+        class CountingSession:
+            def __init__(self):
+                self.calls = []
+        
+            def get(self, url, params=None, timeout=None):
+                self.calls.append((url, params))
+                attempts_made[0] += 1
+                # Fail first attempt, succeed second
+                if attempts_made[0] == 1:
+                    return DummyResponse({}, 500)
+                return DummyResponse([{"id": 1, "home": "A", "away": "B"}], 200)
+    
+        session = CountingSession()
+        client = FotMobClient(session=session, retry=RetryConfig(attempts=2, backoff_factor=0))
+    
+        # With retry, should succeed on second attempt
+        df = client.fetch_fixtures(season="2020", league_id=100)
+        assert attempts_made[0] == 2
+        assert isinstance(df, pd.DataFrame)
+
+
+    def test_fetch_fixtures_backoff_timing():
+        """Test exponential backoff with timing."""
+        import time
+    
+        attempts = [0]
+    
+        class SlowSession:
+            def get(self, url, params=None, timeout=None):
+                attempts[0] += 1
+                if attempts[0] <= 2:
+                    return DummyResponse({}, 500)
+                return DummyResponse([{"id": 1}], 200)
+    
+        session = SlowSession()
+        client = FotMobClient(session=session, retry=RetryConfig(attempts=3, backoff_factor=0.01))
+    
+        start = time.time()
+        try:
+            df = client.fetch_fixtures(season="2020", league_id=100)
+        except:
+            pass
+        elapsed = time.time() - start
+    
+        # Should have waited ~0.01 + 0.02 = 0.03s (exponential backoff)
+        assert elapsed >= 0.01, "Expected backoff sleep time"
+        assert attempts[0] >= 2, "Expected at least 2 retry attempts"
+
+
+    def test_fetch_fixtures_invalid_season_returns_empty():
+        """Test graceful handling of invalid season."""
+        session = DummySession({"fixtures": DummyResponse([])})
+        client = FotMobClient(session=session, retry=RetryConfig(attempts=1))
+    
+        df = client.fetch_fixtures(season="9999/9999", league_id=100)
+        assert isinstance(df, pd.DataFrame)
+        # Should return empty DataFrame, not raise exception
+        assert len(df) == 0
+
+
+    def test_fetch_match_stats_multiple_fixtures():
+        """Test fetching stats from multiple fixtures."""
+        sample = [
+            {"fixture_id": 1, "stat": "shots", "home": 10, "away": 8},
+            {"fixture_id": 2, "stat": "shots", "home": 5, "away": 7},
+        ]
+        session = DummySession({"match_stats": DummyResponse(sample)})
+        client = FotMobClient(session=session, retry=RetryConfig(attempts=1))
+    
+        df = client.fetch_match_stats(fixture_id=1)
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) == 2
     assert isinstance(df, pd.DataFrame)
     assert df.iloc[0]["minutes"] == 90
