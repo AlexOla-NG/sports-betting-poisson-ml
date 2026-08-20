@@ -16,6 +16,7 @@ What this project expects from AI agents
 - Primary code artifacts are Jupyter notebooks under `notebooks/` (NOT .py scripts). Keep notebook structure narrative and include an inputs/outputs top cell per notebook.
 - Shared logic belongs in `src/` (small, well-documented modules). Every new `src/` module requires a corresponding test under `tests/` mirroring the path.
 - Follow the rules in [CONVENTIONS.md](CONVENTIONS.md) strictly (rolling windows from config, no data leakage, walk-forward validation, docstrings/type hints, nbval testing constraints).
+- Keep imports at the top of each Python module and notebook setup cell, grouped as standard library, third-party dependencies, then local `src` imports. Do not add conditional or scattered imports inside processing cells/functions unless a dependency is genuinely optional and the exception is documented.
 
 Test and validation commands (use these in CI and locally)
 - Run unit tests: `pytest -q`
@@ -24,6 +25,7 @@ Test and validation commands (use these in CI and locally)
 
 Agent behavior: do this
 - Prefer editing or adding small `src/` modules rather than embedding large functions inline in notebooks.
+- Place all required imports at the top of Python modules and in the first executable notebook cell so dependencies are visible before pipeline logic begins.
 - When editing/adding files, include docstrings with inputs/outputs and pipeline stage, and add a pytest file under `tests/` for that module.
 - For any change that affects repo structure or design decisions, add an entry to `src/config/JUSTIFICATION.md` (see [CONVENTIONS.md](CONVENTIONS.md)).
 - When encountering ambiguous design choices, STOP and ask a clarifying question rather than guessing.
@@ -70,7 +72,7 @@ If you need to add a new stage (beyond the current 7):
    touch tests/stagename/test_module.py
    ```
 
-4. **Notebook structure** (see [01_fotmob_ingest.ipynb](notebooks/01_ingestion/01_fotmob_ingest.ipynb) as template):
+4. **Notebook structure** (see [01_soccerdata_ingest.ipynb](notebooks/01_ingestion/01_soccerdata_ingest.ipynb) as template):
    - Top markdown cell: stage name, inputs, outputs
    - Section headers: Load Data → Transform → Validate
    - Save to `data/processed/{stage_name}/` as Parquet

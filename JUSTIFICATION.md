@@ -13,9 +13,23 @@ whenever a new feature is added or an existing design changes.
 
 ---
 
-## 2026-08-20 — FotMob Ingestion Pipeline Implementation
+## 2026-08-20 — Migrate Ingestion To soccerdata
 
-**Decision:** Implement FotMob API ingestion with separate Parquet tables (fixtures, match_stats, player_minutes), exponential backoff retry logic, single-season initial scope, and notebook-driven orchestration.
+**Decision:** Replace the custom website scraper with a thin `soccerdata` adapter using FBref for fixtures and match/player statistics, and ClubElo as an additive rating input for later ML features.
+
+**Alternatives considered:**
+1. Continue maintaining the previous custom scraper: Rejected because its undocumented routes and anti-bot behavior caused repeated 404 and maintenance issues.
+2. Use `statsbombpy`: Rejected because its free historical coverage does not provide the required season-over-season EPL dataset.
+3. Use `understatapi`: Deferred because shot-level xG data is not required for the current Poisson, Monte Carlo, and XGBoost stages.
+4. Replace Poisson ratings with ClubElo: Rejected because Elo and Poisson ratings represent different signals; Poisson remains the domain-specific primary model and Elo becomes an ML feature.
+
+**Rationale:** `soccerdata` provides maintained FBref and ClubElo readers, caching, standardized Pandas outputs, and rate-limit handling. The wrapper preserves the existing fixture/statistics method names and Parquet handoff while removing website-specific HTTP and HTML parsing from this repository. The FBref league name is configurable because FBref uses league names rather than provider-specific numeric IDs.
+
+---
+
+## 2026-08-20 — Initial Ingestion Pipeline Implementation
+
+**Decision:** Implement the initial ingestion pipeline with separate Parquet tables (fixtures, match_stats, player_minutes), resilient retrieval, single-season initial scope, and notebook-driven orchestration.
 
 **Alternatives considered:**
 1. Single denormalized table (all fixtures + stats + minutes flattened): Rejected because it would require duplicating fixture data for each match stat/minute record, increasing storage and making it harder to update any one table independently.
@@ -27,7 +41,7 @@ whenever a new feature is added or an existing design changes.
 **Rationale:**
 - **Separate tables:** One row per fixture (or match stat row, or player minute row) avoids data duplication and allows independent updates. Fetching is also faster and clearer.
 - **Parquet format:** Efficient compression, native pandas support, and self-describing schema. Ideal for iterative ML development.
-- **Exponential backoff + retry:** FotMob API occasionally rate-limits; retries with backoff handle transient failures without manual intervention.
+- **Resilient retrieval:** The data library's caching and request handling reduce transient network failures without custom website-specific logic.
 - **Notebook-first:** Aligns with project structure (7-stage pipeline of notebooks); allows downstream stages to load `data/raw/` Parquet as input.
 - **Single season:** 2024/2025 season only (for now). Simplifies initial development; multi-season loop can be added later if needed.
 - **Error logging + continue:** If a single fixture fails, log and move on rather than halting the entire ingestion. Critical errors (no fixtures at all, auth failure) still fail fast.
@@ -46,8 +60,8 @@ whenever a new feature is added or an existing design changes.
   validation to produce a stable Brier score trend.
 
 **Rationale:** Validate the full pipeline (ingestion → ratings → ML → evaluation)
-on a single, data-rich league before scaling. EPL has strong FotMob data coverage
-(xG, shots, lineups). Architecture will remain league-agnostic (league_id as a
+on a single, data-rich league before scaling. EPL has strong FBref data coverage
+(xG, shots, lineups). Architecture will remain league-agnostic (league name as a
 parameter) to support future expansion.
 
 ---
@@ -199,10 +213,10 @@ maintainers can run to ensure agent docs are present and referenced.
 
 ---
 
-## 2026-08-15 — FotMob Ingestion: Parquet + Retry Strategy
+## 2026-08-15 — Ingestion: Parquet + Resilient Retrieval
 
-**Decision:** Save raw ingestion outputs as Parquet files and implement a simple
-retry-with-backoff strategy for FotMob API calls.
+**Decision:** Save raw ingestion outputs as Parquet files and rely on the
+data-library cache and request handling for resilient retrieval.
 
 **Alternatives considered:**
 - JSON/NDJSON files — rejected: slower I/O for tabular analytics and larger on-disk
@@ -211,9 +225,6 @@ retry-with-backoff strategy for FotMob API calls.
   to avoid ops complexity; revisit when dataset size or concurrency demands it.
 
 **Rationale:** Parquet is columnar, compact, and fast to read with `pandas` and
-other analytics tools; it supports schema evolution and avoids repeated JSON
-parsing during iterative development. A simple retry/backoff (3 attempts,
-exponential backoff) balances resilience against transient network/API issues
-while keeping the client implementation lightweight and testable. The retry
-config will live in `src/config/config.yaml` so it can be tuned without code
-changes.
+other analytics tools; it supports schema evolution and avoids repeated parsing
+during iterative development. Delegating caching and request handling to the
+maintained data library keeps the adapter lightweight and testable.

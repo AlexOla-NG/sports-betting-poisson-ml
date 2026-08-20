@@ -12,27 +12,51 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 ## Phase 1: Foundation (Data + Ratings)
 
-### P0 — Task 1.1: FotMob Ingestion
-**Notebook:** `notebooks/01_ingestion/01_fotmob_ingest.ipynb`  
-**Module:** `src/ingestion/fotmob_client.py`  
-**Tests:** `tests/ingestion/test_fotmob_client.py`
+### P0 — Task 1.1: Data Ingestion via soccerdata (FBref + ClubElo)
+**Notebook:** `notebooks/01_ingestion/01_soccerdata_ingest.ipynb`
+**Module:** `src/ingestion/soccerdata_client.py`
+**Tests:** `tests/ingestion/test_soccerdata_client.py`
 
-**Goal:** Pull EPL fixtures, match stats, and player minutes for 2 historical seasons.
+**Goal:** Pull EPL fixtures, match stats, and Elo ratings for 2 historical seasons
+using the maintained `soccerdata` library instead of a custom website scraper.
+
+**Background:** The previous unofficial provider proved unstable and
+undocumented in practice. `soccerdata` wraps FBref (fixtures, results, xG, shots,
+player stats) and ClubElo (pre-computed team Elo ratings) into unified,
+cached pandas DataFrames. See JUSTIFICATION.md entry for full rationale.
 
 **Requirements:**
-- `FotMobClient` class with methods:
-  - `fetch_fixtures(season: str, league_id: int) -> pd.DataFrame`
-  - `fetch_match_stats(fixture_id: int) -> pd.DataFrame`
-  - `fetch_player_minutes(fixture_id: int) -> pd.DataFrame`
-- Graceful API failure handling (retry with backoff, log failures).
-- Save raw data to Parquet: `data/raw/{season}/fixtures.parquet`, `match_stats.parquet`, `player_minutes.parquet`.
-- Notebook displays sample data and row counts; live API cell marked `#NBVAL_SKIP`.
+- `SoccerDataClient` class (thin wrapper around `soccerdata.FBref` and
+  `soccerdata.ClubElo`) with methods:
+  - `fetch_schedule(league: str, seasons: list[str]) -> pd.DataFrame`
+    — wraps `FBref.read_schedule()`
+  - `fetch_team_match_stats(league: str, seasons: list[str], stat_type: str) -> pd.DataFrame`
+    — wraps `FBref.read_team_match_stats()` for goals, shots, xG
+  - `fetch_player_season_stats(league: str, seasons: list[str], stat_type: str) -> pd.DataFrame`
+    — wraps `FBref.read_player_season_stats()` (for future injury/absence work)
+  - `fetch_elo_history(team: str | None = None) -> pd.DataFrame`
+    — wraps `ClubElo.read_team_history()` or `ClubElo.read_by_date()`
+- Do NOT reimplement caching/rate-limiting — `soccerdata` handles this
+  internally (local cache under `~/soccerdata/data/`). Do not disable
+  caching (`no_cache=True`) except in explicit test/debug scenarios.
+- League and seasons must be parameters, not hardcoded, even though we
+  start with `league="ENG-Premier League"` and 2 seasons.
+- Save pulled data to Parquet under `data/raw/{season}/`:
+  `schedule.parquet`, `team_match_stats.parquet`, `elo_history.parquet`.
+- Notebook displays sample data and row counts; live scrape cells marked
+  `#NBVAL_SKIP` (soccerdata's own cache makes repeated calls cheap, but
+  first-run network calls should still be skipped in CI).
 
 **Acceptance criteria:**
-- [ ] Module has type hints, docstrings, and pytest tests with mocked API responses.
-- [ ] Notebook runs without error (skipping live API cell in tests).
-- [ ] No hardcoded assumptions about season format or league ID.
-- [ ] JUSTIFICATION entry for Parquet choice, retry strategy.
+- [ ] Module has type hints, docstrings, and pytest tests using mocked/
+      cached `soccerdata` responses (do not hit live network in tests).
+- [ ] Notebook runs without error (skipping live-scrape cell in tests).
+- [ ] No hardcoded league name or season strings inside functions —
+      passed as parameters, with EPL/2-season as the default call in the notebook.
+- [ ] Elo data successfully joins to fixtures on team name/date (flag any
+      team-name mismatches between FBref and ClubElo naming conventions).
+- [ ] JUSTIFICATION entry already added for the provider → soccerdata switch;
+      add a follow-up entry only if team-name reconciliation logic is non-trivial.
 
 ---
 
@@ -45,7 +69,8 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 **Requirements:**
 - Functions to:
-  - Standardize team/player IDs across seasons.
+  - Standardize team/player IDs across seasons and across FBref/ClubElo
+    naming conventions (team-name reconciliation carried over from Task 1.1).
   - Impute or flag missing xG/shots values.
   - Compute base per-match features: goals for/against, shots for/against, xG for/against.
 - Output: `data/processed/clean_fixtures.parquet`.
@@ -63,13 +88,15 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 **Module:** `src/ratings/poisson.py`  
 **Tests:** `tests/ratings/test_poisson.py`
 
-**Goal:** Compute rolling attack/defense strength per team using Poisson GLM.
+**Goal:** Compute rolling attack/defense strength per team using Poisson GLM,
+with ClubElo ratings retained as a secondary cross-validation signal.
 
 **Requirements:**
 - `fit_poisson_ratings(fixtures: pd.DataFrame, home_field_advantage: bool = True)` returning attack/defense DataFrames.
 - `compute_rolling_ratings(fixtures: pd.DataFrame, window: int)` using `.shift(1)` to avoid leakage.
 - Read window from `src/config/config.yaml` via loader.
-- Plot attack/defense strength over time for example teams.
+- Plot attack/defense strength over time for example teams, overlaid with
+  ClubElo rating trend for sanity-checking.
 - Save rolling ratings to `data/processed/ratings.parquet`.
 
 **Acceptance criteria:**
@@ -90,13 +117,16 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 **Goal:** Tag each player-match as injury/suspension/rotation/cup-absence.
 
 **Requirements:**
-- Function to classify absence type based on player availability data.
+- Function to classify absence type based on player availability data
+  (sourced from FBref player match logs via soccerdata — check minutes
+  played per gameweek to infer absence; exact injury/suspension reason
+  may require a supplementary source if FBref doesn't expose it directly).
 - Output: `data/processed/absences.parquet` with columns: fixture_id, player_id, absence_type, position.
 
 **Acceptance criteria:**
 - [ ] Module tested with synthetic absence records.
 - [ ] Notebook shows distribution of absence types per season.
-- [ ] JUSTIFICATION entry for classification rules.
+- [ ] JUSTIFICATION entry for classification rules and data source used.
 
 ---
 
@@ -170,7 +200,8 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 **Goal:** Build the fixture-level feature table for XGBoost training.
 
 **Requirements:**
-- Rolling form (5-6 match window), xG diff (6-10 match window), rating diffs, adjusted λ, MC probabilities, rest days, H2H.
+- Rolling form (5-6 match window), xG diff (6-10 match window), rating diffs
+  (Poisson AND Elo differential), adjusted λ, MC probabilities, rest days, H2H.
 - All windows from `src/config/config.yaml`.
 - Strict `.shift(1)` usage to avoid leakage.
 - Output: `data/processed/feature_table.parquet`.
@@ -283,7 +314,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 | Priority | Tasks |
 |----------|-------|
-| P0 | 1.1 (Ingestion), 1.2 (Cleaning), 1.3 (Poisson ratings) |
+| P0 | 1.1 (Ingestion via soccerdata), 1.2 (Cleaning), 1.3 (Poisson ratings) |
 | P1 | 2.1 (Absence classification), 2.2 (λ adjustment), 3.1 (Scoreline matrix), 3.2 (Monte Carlo) |
 | P2 | 4.1 (Feature table), 4.2 (XGBoost), 4.3 (Ensemble), 5.1 (Calibration), 5.2 (Recalibration) |
 | P3 | 5.3 (Dashboard) |

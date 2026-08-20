@@ -12,6 +12,7 @@ hints for PRs and CI.
   - New `src/` modules include docstrings, type hints, and a matching test in [tests/](../tests/).
   - Rolling-window hyperparameters are read from the config file rather than hardcoded.
   - Any notebook changes validate under `pytest --nbval-lax` or mark live-API cells with `#NBVAL_SKIP`.
+  - Required imports are grouped at the top of each module and notebook setup cell: standard library, third-party packages, then local `src` imports. Avoid scattered or conditional imports.
   - Add or update the design log in [JUSTIFICATION.md](../JUSTIFICATION.md); if tooling requires a compatibility pointer, keep it brief in same file.
 
 Do not:
@@ -33,10 +34,11 @@ When opening a PR with a new notebook or src/ module:
 ### Notebooks
 - [ ] Top markdown cell documents: stage name, what inputs are expected, what outputs are produced
 - [ ] Run `pytest --nbval-lax` to ensure notebook executes without error
-- [ ] Mark live API cells with `#NBVAL_SKIP` (e.g., FotMob API calls)
+- [ ] Mark live data-source cells with `#NBVAL_SKIP` (e.g., soccerdata FBref calls)
 - [ ] Mark output-changing cells with `#NBVAL_IGNORE_OUTPUT` (e.g., row counts, timestamps)
 - [ ] Sections are clearly labeled with markdown headers (`## Load`, `## Transform`, etc.)
 - [ ] No hardcoded hyperparameters (window lengths, thresholds) — read from src/config/config.yaml
+- [ ] Required imports are centralized in the first executable setup cell and grouped by standard library, third-party, and local imports
 
 ### src/ Modules
 - [ ] Every function has: docstring (purpose, inputs, outputs), type hints

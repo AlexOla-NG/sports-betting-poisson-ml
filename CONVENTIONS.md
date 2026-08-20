@@ -6,14 +6,14 @@ ML pipeline. Follow these rules strictly for every notebook/file you write.
   league-agnostic (accept league_id as a parameter) to support future
   expansion to other European leagues, but do not build multi-league
   logic yet — just don't hardcode EPL-only assumptions where avoidable.
-- Data source: FotMob (unofficial API).
+- Data source: soccerdata (FBref + ClubElo).
 - Historical depth: 2 completed EPL seasons for backtesting.
 
 ## FILE FORMAT: JUPYTER NOTEBOOKS (.ipynb), NOT .py SCRIPTS
 - All pipeline code (ingestion, processing, ratings, adjustments,
   simulation, ml, evaluation) is written as Jupyter notebooks (.ipynb),
   not standalone .py scripts.
-- Shared logic that multiple notebooks need (e.g. a FotMob client class,
+- Shared logic that multiple notebooks need (e.g. a soccerdata client class,
   a Poisson rating function) should still live in a small importable .py
   module under a `src/` package, so notebooks stay focused on
   orchestration/exploration and don't duplicate logic. Notebooks import
@@ -23,6 +23,11 @@ ML pipeline. Follow these rules strictly for every notebook/file you write.
   Output") so it reads top-to-bottom as a narrative, not just code cells.
 - Include a markdown cell at the top of every notebook stating: what
   pipeline stage this notebook covers, its inputs, and its outputs.
+
+## IMPORT ORGANIZATION
+- Put all required imports at the top of each Python module and in the first executable setup cell of each notebook.
+- Group imports in this order: standard library, third-party dependencies, then local `src` imports.
+- Do not scatter imports through processing cells or function bodies. Conditional imports are allowed only for genuinely optional dependencies and must be documented at the import site.
 
 ## REPO STRUCTURE (respect this — place new files in the correct module)
 ```

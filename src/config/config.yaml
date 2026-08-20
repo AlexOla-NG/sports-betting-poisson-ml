@@ -2,6 +2,7 @@
 
 data:
   default_league_id: 47
+  fbref_league: "ENG-Premier League"
   seasons:
     - "2024/2025"
     - "2025/2026"
@@ -58,8 +59,8 @@ evaluation:
   step_size: 38
 
 ingestion:
-  fotmob:
-    base_url: "https://api.fotmob.com"
-    retry:
-      attempts: 3
-      backoff_factor: 1.0
+  soccerdata:
+    league: "ENG-Premier League"
+    no_cache: false
+    no_store: false
+    headless: true

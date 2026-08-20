@@ -7,7 +7,7 @@ XGBoost ensemble correction layer.
 ## Scope (current)
 - **League:** English Premier League (EPL) only
 - **Seasons:** 2 most recent completed seasons (backtesting depth)
-- **Data source:** FotMob (unofficial API)
+- **Data source:** soccerdata (FBref + ClubElo)
 - **Future:** Expand to all major European leagues once EPL pipeline is validated
 
 ## Repo Structure
@@ -48,6 +48,7 @@ sports-betting/
 - **Model:** Poisson/Monte Carlo baseline + XGBoost correction layer, blended ensemble.
 - **Evaluation metric:** Brier score + reliability diagrams (target < 0.20).
 - **File format:** Jupyter notebooks (.ipynb) for pipeline stages, with shared logic in `src/` modules.
+- **Imports:** Required imports are centralized at the top of Python modules and the first executable notebook cell, grouped as standard library, third-party, then local `src` imports.
 
 ## Development Environment
 - **Editor:** VS Code
