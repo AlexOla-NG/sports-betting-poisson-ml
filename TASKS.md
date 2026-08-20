@@ -68,7 +68,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 **Requirements:**
 - `fit_poisson_ratings(fixtures: pd.DataFrame, home_field_advantage: bool = True)` returning attack/defense DataFrames.
 - `compute_rolling_ratings(fixtures: pd.DataFrame, window: int)` using `.shift(1)` to avoid leakage.
-- Read window from `config/config.yaml` via loader.
+- Read window from `src/config/config.yaml` via loader.
 - Plot attack/defense strength over time for example teams.
 - Save rolling ratings to `data/processed/ratings.parquet`.
 
@@ -108,7 +108,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 **Goal:** Adjust expected goals (λ) for home/away teams based on absences.
 
 **Requirements:**
-- Apply positional weights and decay factors from `config/config.yaml`.
+- Apply positional weights and decay factors from `src/config/config.yaml`.
 - Function `adjust_lambda(base_lambda: float, absences: pd.DataFrame, team_id: str) -> float`.
 - Output: `data/processed/adjusted_lambdas.parquet`.
 
@@ -149,7 +149,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 **Requirements:**
 - Function `simulate_fixture(scoreline_matrix: np.ndarray, num_trials: int) -> dict` returning win/draw/loss probs.
-- Read `num_trials` from `config/config.yaml`.
+- Read `num_trials` from `src/config/config.yaml`.
 - Output: `data/processed/mc_probabilities.parquet`.
 
 **Acceptance criteria:**
@@ -171,7 +171,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 **Requirements:**
 - Rolling form (5-6 match window), xG diff (6-10 match window), rating diffs, adjusted λ, MC probabilities, rest days, H2H.
-- All windows from `config/config.yaml`.
+- All windows from `src/config/config.yaml`.
 - Strict `.shift(1)` usage to avoid leakage.
 - Output: `data/processed/feature_table.parquet`.
 
@@ -192,7 +192,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 **Requirements:**
 - Function `train_xgboost(features: pd.DataFrame, target: pd.Series, config: dict)` with walk-forward splits.
-- Hyperparameters from `config/config.yaml`.
+- Hyperparameters from `src/config/config.yaml`.
 - Output: trained model artifact, feature importance report.
 
 **Acceptance criteria:**
@@ -212,7 +212,7 @@ Priority: P0 (foundational) → P1 (core pipeline) → P2 (ML layer) → P3 (eva
 
 **Requirements:**
 - Function `blend_probabilities(poisson_probs: dict, xgboost_probs: dict, weights: dict) -> dict`.
-- Weights from `config/config.yaml`.
+- Weights from `src/config/config.yaml`.
 - Output: `data/processed/ensemble_probabilities.parquet`.
 
 **Acceptance criteria:**

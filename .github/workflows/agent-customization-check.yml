@@ -1,0 +1,20 @@
+name: Agent Customization Checks
+
+on:
+  pull_request:
+    paths:
+      - '**'
+
+jobs:
+  agent-checks:
+    name: Run agent customization checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Run agent customize checks
+        run: |
+          python3 scripts/agent_customize_checks.py

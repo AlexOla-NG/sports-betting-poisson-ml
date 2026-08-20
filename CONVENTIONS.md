@@ -35,7 +35,7 @@ sports-betting/
 │   ├── simulation/
 │   ├── ml/
 │   ├── evaluation/
-│   └── config/         # Configuration loader (reads config/config.yaml)
+│   └── config/         # Configuration loader (reads src/config/config.yaml)
 ├── notebooks/         # .ipynb notebooks, one per pipeline stage/task
 │   ├── 01_ingestion/
 │   ├── 02_processing/
@@ -58,7 +58,7 @@ sports-betting/
 1. Row structure: one row per fixture, home/away DIFF features
    (e.g., home_ppg_last5 - away_ppg_last5), not two rows per fixture.
 2. Rolling window lengths (form, xG, etc.) must NEVER be hardcoded inline.
-   They must be read from config/config.yaml via src/config/loader.py so
+   They must be read from src/config/config.yaml via src/config/loader.py so
    they can be tuned as hyperparameters later.
 3. No data leakage: any rolling/aggregate feature must use .shift(1) or
    equivalent so a match's own outcome never leaks into its own feature

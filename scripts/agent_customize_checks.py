@@ -2,8 +2,7 @@
 """Simple CI check for agent customization files.
 
 Checks that AGENTS.md and .github/copilot-instructions.md exist,
-that README references JUSTIFICATION.md, and that
-src/config/JUSTIFICATION.md contains a date entry.
+that README references JUSTIFICATION.md, and JUSTIFICATION.md contains a date entry.
 """
 import os
 import re
@@ -25,7 +24,7 @@ def main():
 
     agents_md = os.path.join(repo_root, "AGENTS.md")
     copilot = os.path.join(repo_root, ".github", "copilot-instructions.md")
-    justification = os.path.join(repo_root, "src", "config", "JUSTIFICATION.md")
+    justification = os.path.join(repo_root, "JUSTIFICATION.md")
     readme = os.path.join(repo_root, "README.md")
 
     checks.append(("AGENTS.md exists", exists(agents_md)))
@@ -42,7 +41,7 @@ def main():
         date_like = re.search(r"\d{4}-\d{2}-\d{2}", jcontent)
         checks.append(("JUSTIFICATION.md contains YYYY-MM-DD date", bool(date_like)))
     else:
-        checks.append(("src/config/JUSTIFICATION.md exists", False))
+        checks.append(("JUSTIFICATION.md exists", False))
 
     failed = False
     for desc, ok in checks:

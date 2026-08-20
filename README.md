@@ -21,7 +21,7 @@ sports-betting/
 │   ├── simulation/
 │   ├── ml/
 │   ├── evaluation/
-│   └── config/         # Configuration loader (reads config/config.yaml)
+│   └── config/         # Configuration loader (reads src/config/config.yaml)
 ├── notebooks/         # .ipynb notebooks, one per pipeline stage/task
 │   ├── 01_ingestion/
 │   ├── 02_processing/
@@ -42,7 +42,7 @@ sports-betting/
 
 ## Design Decisions
 - **Row structure:** One row per fixture, home/away diff features (not two rows per fixture).
-- **Rolling windows:** Treated as tunable hyperparameters via `config/config.yaml`, not hardcoded.
+- **Rolling windows:** Treated as tunable hyperparameters via `src/config/config.yaml`, not hardcoded.
   Starting priors: form 5-6 matches, xG 6-10 matches, ratings 8 matches — to be tuned empirically.
 - **Validation:** Walk-forward (expanding window), never random train/test split.
 - **Model:** Poisson/Monte Carlo baseline + XGBoost correction layer, blended ensemble.
@@ -63,7 +63,7 @@ pytest --nbval-lax notebooks/
 Notebooks with non-deterministic or live-API cells should use `#NBVAL_SKIP` markers.
 
 ## Configuration
-All hyperparameters live in `config/config.yaml` — never hardcode window lengths,
+All hyperparameters live in `src/config/config.yaml` — never hardcode window lengths,
 weights, or other magic numbers in code. Load via:
 
 ```python
