@@ -4,6 +4,20 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-08-21 — Task 2.1 Player Absence Classification Implementation
+
+**Decision:** Implement `src/adjustments/absence_classifier.py` and `notebooks/04_adjustments/01_absence_classification.ipynb` to map FBref player position strings into standard 4-group tags (`GK`, `DEF`, `MID`, `FWD`), compute point-in-time rolling minute shares (`starter_minute_share >= 0.45` in past 5 matches, shifted by `.shift(1)`), and tag missed starter appearances as `injury` ($\ge 2$ consecutive missed games) vs `rotation_suspension` ($1$ missed game).
+
+**Alternatives considered:**
+1. Dynamic injury reason web scraping: Rejected for base pipeline because minute logs and consecutive match absences reliably identify player non-availability without fragile scraping.
+2. 7-position breakdown vs 4-group tags: Standardized to 4 main groups (`GK`, `DEF`, `MID`, `FWD`) for robust, un-overfitted positional weight adjustments in Task 2.2.
+3. Static season-level starter definitions: Rejected because player starter status changes dynamically due to transfers, form, and tactical changes; a rolling 5-match minute share (`.shift(1)`) accurately reflects point-in-time squad role.
+
+**Rationale:** Classifying key starter non-availability dynamically by position group and consecutive duration enables realistic expected goal ($\lambda$) degradation factors in Task 2.2.
+
+
+---
+
 ## 2026-08-21 — Task 1.3 Poisson Attack & Defense Ratings Implementation
 
 **Decision:** Implement `src/ratings/poisson.py` and `notebooks/03_ratings/01_poisson_ratings.ipynb` using a log-linear Poisson GLM (`statsmodels.api.GLM` with Log link) fitted over a per-team rolling match window (`rating_window = 8` from `config.yaml`) with strict `.shift(1)` point-in-time correctness, expanding window cold start (defaulting to 1.0 multiplier), and normalized attack/defense ratings centered around 1.0.
