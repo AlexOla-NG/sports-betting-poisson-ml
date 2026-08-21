@@ -4,6 +4,18 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-08-21 — Task 1.2 Data Cleaning & Base Features Implementation
+
+**Decision:** Implement data cleaning module `src/processing/clean_features.py` and notebook `notebooks/02_processing/01_clean_features.ipynb` using explicit team-name mapping dictionaries, 1-row-per-fixture layout, point-in-time non-leaking differential features, and explicit missing xG indicator flags (`is_xg_missing`).
+
+**Alternatives considered:**
+1. Dynamic fuzzy matching for team names: Rejected because hardcoded dictionary mapping for EPL team names between FBref and ClubElo is 100% deterministic, instant, and eliminates runtime ambiguity.
+2. Imputing missing xG with global or team rolling mean during cleaning: Rejected because imputing raw data during base feature cleaning creates potential data leakage if unplayed/postponed fixtures use future statistics. Retaining `NaN` and flagging `is_xg_missing` preserves data integrity for point-in-time downstream rolling models.
+3. 2-row-per-fixture layout (one per team): Rejected per repository hard constraint (Rule 1 in CONVENTIONS.md: 1 row per fixture, home/away diff features).
+
+**Rationale:** Standardizing team names guarantees clean joins with ClubElo in later ML stages. Producing home minus away differential features directly aligns with the single-row fixture layout and walk-forward validation requirements.
+
+
 ---
 
 ## 2026-08-21 — Auto-Sanitize Numeric Types in Match Stats Ingestion
