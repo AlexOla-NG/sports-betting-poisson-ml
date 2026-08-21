@@ -4,6 +4,20 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-08-21 — Task 1.3 Poisson Attack & Defense Ratings Implementation
+
+**Decision:** Implement `src/ratings/poisson.py` and `notebooks/03_ratings/01_poisson_ratings.ipynb` using a log-linear Poisson GLM (`statsmodels.api.GLM` with Log link) fitted over a per-team rolling match window (`rating_window = 8` from `config.yaml`) with strict `.shift(1)` point-in-time correctness, expanding window cold start (defaulting to 1.0 multiplier), and normalized attack/defense ratings centered around 1.0.
+
+**Alternatives considered:**
+1. Dixon-Coles adjusted Poisson model: Deferred to model refinement stage since basic Poisson GLM provides a clean, robust baseline for attack/defense parameter estimation without requiring numerical optimization for low-score tau adjustments.
+2. Fixed date window (e.g. 60 days): Rejected in favor of a fixed match-count window per team (`rating_window`) to handle match postponements and irregular scheduling evenly across teams.
+3. Static seasonal fit: Rejected because static fits cause severe forward data leakage; point-in-time rolling GLMs ensure match $k$'s outcome never leaks into match $k$'s pre-match rating.
+
+**Rationale:** Poisson GLM with home-field advantage provides separate, interpretable attack and defense multipliers per team. Normalizing parameters to mean 1.0 simplifies downstream expected goal ($\lambda$) calculations ($\lambda_{\text{home}} = \text{league\_avg} \times \text{att}_{\text{home}} \times \text{def}_{\text{away}} \times \sqrt{\text{home\_adv}}$).
+
+
+---
+
 ## 2026-08-21 — Task 1.2 Data Cleaning & Base Features Implementation
 
 **Decision:** Implement data cleaning module `src/processing/clean_features.py` and notebook `notebooks/02_processing/01_clean_features.ipynb` using explicit team-name mapping dictionaries, 1-row-per-fixture layout, point-in-time non-leaking differential features, and explicit missing xG indicator flags (`is_xg_missing`).
