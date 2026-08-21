@@ -93,6 +93,31 @@ class SoccerDataClient:
             frame = pd.concat([frame, scores.astype("Float64")], axis=1)
         return frame
 
+    @staticmethod
+    def _sanitize_match_stats(df: pd.DataFrame) -> pd.DataFrame:
+        """Coerce numeric-looking object columns to Int64 or Float64.
+
+        FBref match stats tables often contain mixed types or empty strings/placeholders
+        in numeric columns (like GF, GA, Sh, SoT), causing PyArrow schema errors
+        when saving to Parquet.
+        """
+        df = df.copy()
+        for col in df.columns:
+            if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
+                non_empty_originals = (
+                    df[col].astype(str).str.strip().replace(["", "nan", "None", "<NA>"], pd.NA).dropna()
+                )
+                if len(non_empty_originals) > 0:
+                    numeric_series = pd.to_numeric(df[col], errors="coerce")
+                    converted_non_nulls = numeric_series.loc[non_empty_originals.index].dropna()
+                    if len(converted_non_nulls) / len(non_empty_originals) >= 0.8:
+                        is_int = (numeric_series.dropna() % 1 == 0).all()
+                        if is_int:
+                            df[col] = numeric_series.astype("Int64")
+                        else:
+                            df[col] = numeric_series.astype("Float64")
+        return df
+
     def fetch_fixtures(self, season: str, league_id: int | None = None) -> pd.DataFrame:
         """Fetch and normalize EPL fixtures from FBref.
 
@@ -112,6 +137,23 @@ class SoccerDataClient:
         reader = self._reader(season)
         return self._normalize_schedule(reader.read_schedule())
 
+    def fetch_all_match_stats(self, season: str) -> pd.DataFrame:
+        """Fetch and sanitize team match statistics for an entire season.
+
+        Parameters
+        ----------
+        season : str
+            Season label in ``YYYY/YYYY`` or ``YYYY-YYYY`` format.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Team match statistics with normalized numeric data types.
+        """
+        reader = self._reader(season)
+        stats = reader.read_team_match_stats(stat_type="schedule").reset_index()
+        return self._sanitize_match_stats(stats)
+
     def fetch_match_stats(self, fixture_id: str) -> pd.DataFrame:
         """Fetch team match statistics for one FBref game ID."""
         if self._fbref is None:
@@ -128,7 +170,7 @@ class SoccerDataClient:
         elif "game_id" in stats.columns:
             stats = stats[stats["game_id"].astype(str) == str(fixture_id)]
         stats.insert(0, "fixture_id", str(fixture_id))
-        return stats.reset_index(drop=True)
+        return self._sanitize_match_stats(stats.reset_index(drop=True))
 
     def fetch_player_minutes(self, fixture_id: str) -> pd.DataFrame:
         """Fetch player match statistics for one FBref game ID."""

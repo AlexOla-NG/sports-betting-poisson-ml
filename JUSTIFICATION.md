@@ -1,15 +1,35 @@
-2026-08-15 — Added agent customization guidance files and CI check script to validate agent docs. Changes:
-
-- Add `AGENTS.md` and `.github/copilot-instructions.md` for agent guidance
-- Add `scripts/agent_customize_checks.py` and GitHub Actions workflow to run checks
-
-Rationale: Ensure agent customization files follow repository conventions and are validated by CI before merging.
-
 # Design Justification Log
 
 This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
+
+---
+
+## 2026-08-21 — Auto-Sanitize Numeric Types in Match Stats Ingestion
+
+**Decision:** Add `_sanitize_match_stats` and `fetch_all_match_stats` to `SoccerDataClient` to auto-detect and coerce numeric-looking object columns (e.g. `GF`, `GA`, `xG`, `Sh`) to nullable integer (`Int64`) or float (`Float64`) types.
+
+**Alternatives considered:**
+1. Hardcode column list for type coercion: Rejected because FBref returns varied table columns across endpoints and endpoints may change column schema; auto-detection is resilient without maintaining column lists.
+2. In-line notebook coercion: Rejected because type cleaning at ingestion prevents downstream Parquet write errors across all execution contexts.
+3. Coerce to float64 for all numeric columns: Rejected because integer counts like goals scored (`GF`/`GA`) lose integer semantics when converted to float.
+
+**Rationale:** FBref table columns frequently contain mixed types (integers mixed with empty string placeholders or non-numeric strings for postponed/unplayed matches). PyArrow fails with `ArrowTypeError` when attempting to serialize object columns with mixed types to Parquet. Auto-detecting numeric object columns (where >=80% of non-blank entries are numeric) and casting to `Int64` or `Float64` ensures clean Parquet serialization while preserving nullable `NaN` values.
+
+
+---
+
+## 2026-08-20 — Defer Player Availability Retrieval
+
+**Decision:** Exclude per-fixture player-minute retrieval from the base ingestion notebook and defer it to the targeted absence-classification stage.
+
+**Alternatives considered:**
+1. Retrieve player match pages for every fixture during ingestion: Rejected because it requires hundreds of sequential dynamic-page requests and can take hours.
+2. Infer injury, suspension, and rotation reasons directly from minutes: Rejected because minutes show participation, not the reason for non-participation.
+3. Remove player availability support entirely: Rejected because Task 2.1 may need targeted player logs for regular starters and high-minute players.
+
+**Rationale:** Fixtures and team match statistics are sufficient for cleaning and Poisson ratings. The later absence stage can first identify regular players from season-level data, then retrieve only relevant match logs and classify results conservatively as availability states. The existing client method remains available for that targeted workflow without slowing base ingestion.
 
 ---
 
@@ -228,3 +248,12 @@ data-library cache and request handling for resilient retrieval.
 other analytics tools; it supports schema evolution and avoids repeated parsing
 during iterative development. Delegating caching and request handling to the
 maintained data library keeps the adapter lightweight and testable.
+
+---
+
+## 2026-08-15 — Added agent customization guidance files and CI check script to validate agent docs. Changes:
+
+- Add `AGENTS.md` and `.github/copilot-instructions.md` for agent guidance
+- Add `scripts/agent_customize_checks.py` and GitHub Actions workflow to run checks
+
+**Rationale:** Ensure agent customization files follow repository conventions and are validated by CI before merging.

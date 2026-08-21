@@ -118,3 +118,45 @@ def test_save_parquet_creates_parent_directory(tmp_path):
 
     assert path.exists()
     assert pd.read_parquet(path).loc[0, "fixture_id"] == 1
+
+
+def test_sanitize_match_stats_coerces_numeric_object_columns():
+    df = pd.DataFrame(
+        {
+            "team": ["Arsenal", "Chelsea", "Liverpool"],
+            "GF": [2, "1", ""],
+            "GA": ["0", 3, None],
+            "xG": [1.5, "0.8", "2.1"],
+            "notes": ["Postponed", "", "Fine"],
+        }
+    )
+
+    sanitized = SoccerDataClient._sanitize_match_stats(df)
+
+    assert pd.api.types.is_integer_dtype(sanitized["GF"])
+    assert pd.api.types.is_integer_dtype(sanitized["GA"])
+    assert pd.api.types.is_float_dtype(sanitized["xG"])
+    assert sanitized["team"].dtype == object or pd.api.types.is_string_dtype(sanitized["team"])
+    assert sanitized["notes"].dtype == object or pd.api.types.is_string_dtype(sanitized["notes"])
+    assert sanitized.loc[0, "GF"] == 2
+    assert sanitized.loc[1, "GF"] == 1
+    assert pd.isna(sanitized.loc[2, "GF"])
+
+
+def test_fetch_all_match_stats_sanitizes_full_season_table():
+    raw_stats = pd.DataFrame(
+        {
+            "team": ["Arsenal"],
+            "GF": ["2"],
+            "GA": [1],
+        }
+    )
+    fbref = DummyFBref(pd.DataFrame(), team_stats=raw_stats)
+    client = SoccerDataClient(fbref=fbref)
+
+    result = client.fetch_all_match_stats("2024/2025")
+
+    assert pd.api.types.is_integer_dtype(result["GF"])
+    assert result.loc[0, "GF"] == 2
+    assert fbref.team_stats_calls == 1
+

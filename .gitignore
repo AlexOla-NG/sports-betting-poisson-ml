@@ -36,6 +36,8 @@ htmlcov/
 *.cover
 .hypothesis/
 .tox/
+downloaded_files/
+**/downloaded_files/
 
 # Jupyter
 .ipynb_checkpoints/
