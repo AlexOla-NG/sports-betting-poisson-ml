@@ -7,6 +7,7 @@ Quick links
 - Config: [src/config/config.yaml](src/config/config.yaml)
 - Notebooks: `notebooks/` (one notebook per pipeline stage)
 - Shared code: `src/`
+- Data artifacts: `data/raw/` and `data/processed/` (gitignored)
 - GitHub/Copilot guidance: [.github/copilot-instructions.md](.github/copilot-instructions.md)
 - Agent check script: `scripts/agent_customize_checks.py` (run locally or in CI)
 - CI workflow: [.github/workflows/agent-customization-check.yml](.github/workflows/agent-customization-check.yml)
@@ -18,6 +19,14 @@ What this project expects from AI agents
 - Follow the rules in [CONVENTIONS.md](CONVENTIONS.md) strictly (rolling windows from config, no data leakage, walk-forward validation, docstrings/type hints, nbval testing constraints).
 - Keep imports at the top of each Python module and notebook setup cell, grouped as standard library, third-party dependencies, then local `src` imports. Do not add conditional or scattered imports inside processing cells/functions unless a dependency is genuinely optional and the exception is documented.
 
+Repository-specific execution rules
+- Use the selected Python environment (the code uses Python 3.10+ syntax); install dependencies from `requirements.txt` before running tests or notebooks.
+- Run commands from the repository root. Notebook code must locate the root by finding `src/config/loader.py` and derive all config and data paths from that root; do not rely on fixed `Path.cwd().parents[...]` assumptions.
+- Current canonical artifacts are `data/raw/{season}/fixtures.parquet`, `data/raw/{season}/match_stats.parquet`, and `data/processed/clean_fixtures.parquet`. Treat [TASKS.md](TASKS.md) as planning history where names differ from implemented notebooks.
+- Live ingestion may be skipped in notebook tests, but downstream notebooks must assert that required input artifacts exist and must not silently continue with empty data.
+- Preserve one row per persisted fixture. A two-row team-perspective representation is acceptable only as an internal modeling input when the returned feature table remains one row per fixture.
+- Tests must not use live APIs or committed data artifacts. Mock external calls and use small in-memory fixtures.
+
 Test and validation commands (use these in CI and locally)
 - Run unit tests: `pytest -q`
 - Validate notebooks: `pytest --nbval-lax`
@@ -27,9 +36,9 @@ Agent behavior: do this
 - Prefer editing or adding small `src/` modules rather than embedding large functions inline in notebooks.
 - Place all required imports at the top of Python modules and in the first executable notebook cell so dependencies are visible before pipeline logic begins.
 - When editing/adding files, include docstrings with inputs/outputs and pipeline stage, and add a pytest file under `tests/` for that module.
-- For any change that affects repo structure or design decisions, add an entry to `src/config/JUSTIFICATION.md` (see [CONVENTIONS.md](CONVENTIONS.md)).
+- For any change that affects repo structure or design decisions, add an entry to [JUSTIFICATION.md](JUSTIFICATION.md) (see [CONVENTIONS.md](CONVENTIONS.md)).
 - When encountering ambiguous design choices, STOP and ask a clarifying question rather than guessing.
-- Always update `README.md` and `CONVENTIONS.md` when scope or structure changes.
+- Always update `README.md` when scope or structure changes. Treat [CONVENTIONS.md](CONVENTIONS.md) as the canonical policy; do not modify it without maintainer discussion.
 
 Agent behavior: do NOT do this
 - Do not hardcode hyperparameters (window lengths, etc.) — read them from `src/config/config.yaml`.
@@ -75,7 +84,7 @@ If you need to add a new stage (beyond the current 7):
 4. **Notebook structure** (see [01_soccerdata_ingest.ipynb](notebooks/01_ingestion/01_soccerdata_ingest.ipynb) as template):
    - Top markdown cell: stage name, inputs, outputs
    - Section headers: Load Data → Transform → Validate
-   - Save to `data/processed/{stage_name}/` as Parquet
+   - Save to the canonical locations defined by the stage and notebook; do not invent a nested directory layout without updating the docs
    - Mark live API / non-deterministic cells with `#NBVAL_SKIP`
 
 5. **Update JUSTIFICATION.md**:
