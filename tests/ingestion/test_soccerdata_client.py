@@ -38,6 +38,25 @@ class DummyClubElo:
         return self.ratings
 
 
+class DummyUnderstat:
+    def __init__(self, player_stats, schedule):
+        self.player_stats = player_stats
+        self.schedule = schedule
+        self.player_stats_calls = 0
+        self.schedule_calls = 0
+        self.schedule_kwargs = []
+
+    def read_player_match_stats(self, match_id=None):
+        self.player_stats_calls += 1
+        assert match_id is None
+        return self.player_stats
+
+    def read_schedule(self, include_matches_without_data=True):
+        self.schedule_calls += 1
+        self.schedule_kwargs.append(include_matches_without_data)
+        return self.schedule
+
+
 def test_season_name_accepts_slash_and_hyphen():
     assert SoccerDataClient._season_name("2024/2025") == "2024-2025"
     assert SoccerDataClient._season_name("2024-2025") == "2024-2025"
@@ -159,4 +178,47 @@ def test_fetch_all_match_stats_sanitizes_full_season_table():
     assert pd.api.types.is_integer_dtype(result["GF"])
     assert result.loc[0, "GF"] == 2
     assert fbref.team_stats_calls == 1
+
+
+def test_fetch_player_match_stats_normalizes_understat_schema():
+    player_stats = pd.DataFrame(
+        {
+            "game_id": [101, 101],
+            "player_id": ["1", "2"],
+            "position": ["DMC", "FWR"],
+            "minutes": [90, 12],
+        }
+    ).set_index(
+        pd.MultiIndex.from_tuples(
+            [
+                ("ENG-Premier League", "2425", "2024-08-16", "Arsenal", "Player A"),
+                ("ENG-Premier League", "2425", "2024-08-16", "Arsenal", "Player B"),
+            ],
+            names=["league", "season", "game", "team", "player"],
+        )
+    )
+    schedule = pd.DataFrame(
+        {"game_id": [101], "date": ["2024-08-16"]}
+    )
+    understat = DummyUnderstat(player_stats, schedule)
+    client = SoccerDataClient(
+        config=SoccerDataConfig(seasons=("2024/2025",)),
+        understat=understat,
+    )
+
+    result = client.fetch_player_match_stats()
+
+    assert list(result.columns) == [
+        "fixture_id",
+        "date",
+        "team",
+        "player_id",
+        "player_name",
+        "position",
+        "minutes_played",
+    ]
+    assert result["position"].tolist() == ["DM", "FW"]
+    assert result["minutes_played"].tolist() == [90, 12]
+    assert understat.player_stats_calls == 1
+    assert understat.schedule_kwargs == [False]
 

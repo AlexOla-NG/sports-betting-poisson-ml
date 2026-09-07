@@ -116,11 +116,17 @@ with ClubElo ratings retained as a secondary cross-validation signal.
 
 **Goal:** Tag each player-match as injury/suspension/rotation/cup-absence.
 
+**Corrected data-sourcing step:** Use Understat player-match appearances via
+`soccerdata.Understat.read_player_match_stats()` with no `match_id`, join dates
+from `read_schedule()`, and infer missing rows only for pre-fixture key starters
+identified by the rolling minute-share rule. Do not use Transfermarkt or
+cross-join all players against all fixtures.
+
 **Requirements:**
 - Function to classify absence type based on player availability data
-  (sourced from FBref player match logs via soccerdata — check minutes
-  played per gameweek to infer absence; exact injury/suspension reason
-  may require a supplementary source if FBref doesn't expose it directly).
+  (sourced from Understat player match appearances via soccerdata — infer
+  missing appearances only for established pre-fixture key starters; exact
+  injury/suspension reason is intentionally not observed).
 - Output: `data/processed/absences.parquet` with columns: fixture_id, player_id, absence_type, position.
 
 **Acceptance criteria:**

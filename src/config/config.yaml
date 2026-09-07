@@ -24,15 +24,21 @@ xg:
 
 injury:
   positional_weights:
-    goalkeeper: 1.4
-    centre_back: 1.3
-    full_back: 1.1
-    defensive_mid: 1.2
-    central_mid: 1.2
-    winger: 1.0
-    striker: 1.1
+    # goalkeeper: 1.4
+    # centre_back: 1.3
+    # full_back: 1.1
+    # defensive_mid: 1.2
+    # central_mid: 1.2
+    # winger: 1.0
+    # striker: 1.1
+    GK: 1.4
+    DEF: 1.2
+    MID: 1.2
+    FWD: 1.05
   injury_decay: 0.7
   min_absence_matches: 3
+  starter_minute_threshold: 0.45
+  starter_rolling_window: 5
 
 monte_carlo:
   num_trials: 10000

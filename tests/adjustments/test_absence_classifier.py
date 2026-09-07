@@ -5,6 +5,7 @@ import pytest
 from src.adjustments.absence_classifier import (
     classify_consecutive_absence,
     identify_player_absences,
+    identify_player_absences_from_appearances,
     map_fbref_position,
 )
 
@@ -50,3 +51,50 @@ def test_identify_player_absences_flags_key_starters_without_leakage():
     # Match 7 (second missed game): injury
     assert absences.loc[1, "fixture_id"] == "f7"
     assert absences.loc[1, "absence_type"] == "injury"
+
+
+def test_appearance_detector_only_infers_missing_established_starters():
+    dates = pd.date_range("2024-08-01", periods=7, freq="7D")
+    rows = []
+    for index, date in enumerate(dates[:5], start=1):
+        rows.append(
+            {
+                "fixture_id": f"f{index}",
+                "date": date,
+                "team": "Arsenal",
+                "player_id": "starter",
+                "player_name": "Established Starter",
+                "position": "FW",
+                "minutes_played": 90,
+            }
+        )
+        rows.append(
+            {
+                "fixture_id": f"f{index}",
+                "date": date,
+                "team": "Arsenal",
+                "player_id": "fringe",
+                "player_name": "Fringe Player",
+                "position": "MF",
+                "minutes_played": 10,
+            }
+        )
+
+    rows.extend(
+        {
+            "fixture_id": f"f{index}",
+            "date": dates[index - 1],
+            "team": "Arsenal",
+            "player_id": "fringe",
+            "player_name": "Fringe Player",
+            "position": "MF",
+            "minutes_played": 10,
+        }
+        for index in (6, 7)
+    )
+
+    absences = identify_player_absences_from_appearances(pd.DataFrame(rows))
+
+    assert absences["player_id"].tolist() == ["starter", "starter"]
+    assert absences["fixture_id"].tolist() == ["f6", "f7"]
+    assert absences["absence_type"].tolist() == ["rotation_suspension", "injury"]

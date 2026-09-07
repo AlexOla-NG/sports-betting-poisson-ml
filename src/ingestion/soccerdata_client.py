@@ -1,8 +1,8 @@
 """soccerdata ingestion adapter for the EPL pipeline.
 
-This module delegates retrieval and caching to soccerdata's FBref and ClubElo
-readers. It keeps the ingestion-stage method names stable for the notebook and
-downstream Parquet outputs while avoiding a custom website scraper.
+This module delegates retrieval and caching to soccerdata's FBref, ClubElo, and
+Understat readers. It keeps the ingestion-stage method names stable for the
+notebook and downstream Parquet outputs while avoiding custom website scrapers.
 """
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from typing import Protocol
 
 import pandas as pd
 import soccerdata as sd
+
+from src.config.loader import load_config
 
 
 class ScheduleReader(Protocol):
@@ -30,11 +32,22 @@ class EloReader(Protocol):
         """Return team Elo ratings for a date."""
 
 
+class UnderstatReader(Protocol):
+    """Protocol for the Understat reader used by this adapter."""
+
+    def read_player_match_stats(self, match_id: int | list[int] | None = None) -> pd.DataFrame:
+        """Return player match statistics for selected leagues and seasons."""
+
+    def read_schedule(self, include_matches_without_data: bool = True) -> pd.DataFrame:
+        """Return the Understat schedule for selected leagues and seasons."""
+
+
 @dataclass(frozen=True)
 class SoccerDataConfig:
     """Configuration for the soccerdata ingestion stage."""
 
     league: str = "ENG-Premier League"
+    seasons: tuple[str, ...] | None = None
     no_cache: bool = False
     no_store: bool = False
     headless: bool = True
@@ -52,10 +65,12 @@ class SoccerDataClient:
         config: SoccerDataConfig | None = None,
         fbref: ScheduleReader | None = None,
         clubelo: EloReader | None = None,
+        understat: UnderstatReader | None = None,
     ) -> None:
         self.config = config or SoccerDataConfig()
         self._fbref = fbref
         self._clubelo = clubelo
+        self._understat = understat
 
     @staticmethod
     def _season_name(season: str) -> str:
@@ -75,6 +90,25 @@ class SoccerDataClient:
                 headless=self.config.headless,
             )
         return self._fbref
+
+    def _understat_seasons(self) -> tuple[str, ...]:
+        """Resolve Understat seasons from the central repository config."""
+        if self.config.seasons is not None:
+            return tuple(self.config.seasons)
+
+        config = load_config()
+        return tuple(config["data"]["seasons"])
+
+    def _understat_reader(self) -> UnderstatReader:
+        """Create or return the configured Understat reader."""
+        if self._understat is None:
+            self._understat = sd.Understat(
+                leagues=self.config.league,
+                seasons=self._understat_seasons(),
+                no_cache=self.config.no_cache,
+                no_store=self.config.no_store,
+            )
+        return self._understat
 
     @staticmethod
     def _normalize_schedule(schedule: pd.DataFrame) -> pd.DataFrame:
@@ -181,6 +215,102 @@ class SoccerDataClient:
             match_id=str(fixture_id),
         )
         return players.reset_index(drop=True)
+
+    @staticmethod
+    def _normalize_understat_position(position: object) -> str:
+        """Translate Understat position labels to FBref-compatible labels.
+
+        Understat uses positional labels such as ``DMC`` and ``FWR`` while
+        the absence classifier accepts FBref-style groups such as ``DM`` and
+        ``FW``. ``Sub`` is retained because it describes an appearance role,
+        not a playing position; missing expected starters inherit their last
+        known non-``Sub`` position in the adjustments stage.
+        """
+        if pd.isna(position):
+            return "MID"
+        understat_position = str(position).strip().upper()
+        position_map = {
+            "GK": "GK",
+            "DL": "DF",
+            "DC": "DF",
+            "DR": "DF",
+            "DMC": "DM",
+            "DML": "DM",
+            "DMR": "DM",
+            "MC": "MF",
+            "ML": "MF",
+            "MR": "MF",
+            "AMC": "AM",
+            "AML": "AM",
+            "AMR": "AM",
+            "FW": "FW",
+            "FWL": "FW",
+            "FWR": "FW",
+            "SUB": "SUB",
+        }
+        return position_map.get(understat_position, "MID")
+
+    @staticmethod
+    def _normalize_understat_schedule(schedule: pd.DataFrame) -> pd.DataFrame:
+        """Extract Understat fixture IDs and dates from columns or index."""
+        frame = schedule.reset_index() if isinstance(schedule.index, pd.MultiIndex) else schedule.reset_index(drop=True)
+        if "fixture_id" not in frame.columns and "game_id" in frame.columns:
+            frame = frame.rename(columns={"game_id": "fixture_id"})
+        if "fixture_id" not in frame.columns:
+            raise ValueError("Understat schedule must contain game_id")
+
+        date_column = next(
+            (column for column in ("date", "match_date", "game") if column in frame.columns),
+            None,
+        )
+        if date_column is None:
+            raise ValueError("Understat schedule must contain a match date")
+        return frame[["fixture_id", date_column]].rename(columns={date_column: "date"})
+
+    def fetch_player_match_stats(self) -> pd.DataFrame:
+        """Fetch and normalize all Understat player appearances.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Player appearance rows with exactly ``fixture_id``, ``date``,
+            ``team``, ``player_id``, ``player_name``, ``position``, and
+            ``minutes_played``. This is an ingestion-stage table; expected
+            missing starter rows are derived later from pre-fixture history.
+        """
+        output_columns = [
+            "fixture_id",
+            "date",
+            "team",
+            "player_id",
+            "player_name",
+            "position",
+            "minutes_played",
+        ]
+        reader = self._understat_reader()
+        stats = reader.read_player_match_stats()
+        if stats.empty:
+            return pd.DataFrame(columns=output_columns)
+
+        frame = stats.reset_index()
+        rename_map = {
+            "game_id": "fixture_id",
+            "player": "player_name",
+            "minutes": "minutes_played",
+        }
+        frame = frame.rename(columns=rename_map)
+        required_columns = {"fixture_id", "team", "player_id", "player_name", "position", "minutes_played"}
+        missing_columns = required_columns.difference(frame.columns)
+        if missing_columns:
+            raise ValueError(f"Understat player stats missing columns: {sorted(missing_columns)}")
+
+        schedule = self._normalize_understat_schedule(reader.read_schedule(include_matches_without_data=False))
+        frame = frame.merge(schedule, on="fixture_id", how="left", validate="many_to_one")
+        frame["position"] = frame["position"].map(self._normalize_understat_position)
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        frame["minutes_played"] = pd.to_numeric(frame["minutes_played"], errors="coerce")
+        frame = frame[output_columns].dropna(subset=["fixture_id", "date", "team", "player_id"])
+        return frame.sort_values(["date", "fixture_id", "team", "player_id"]).reset_index(drop=True)
 
     def fetch_elo(self, date: str | datetime | None = None) -> pd.DataFrame:
         """Fetch ClubElo ratings for an optional date.

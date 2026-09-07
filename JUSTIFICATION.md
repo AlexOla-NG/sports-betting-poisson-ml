@@ -4,6 +4,35 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-09-06 — Understat Appearance-Based Absence Sourcing
+
+**Decision:** Replace the placeholder/FBref-assumed player-log source with
+Understat player-match appearances through `soccerdata`. Normalize Understat's
+`game_id`, `player`, and `minutes` fields to the absence pipeline schema and
+join match dates from Understat's schedule. Infer a missing appearance only
+when the player was already a key starter before that fixture under the
+config-driven rolling five-match, 45% minute-share rule.
+
+**Alternatives considered:**
+1. Transfermarkt or another supplemental scraper: Rejected because this
+  pipeline must not use a source whose Terms of Service prohibit scraping or
+  AI/ML use.
+2. Cross-join every historical player with every fixture: Rejected because
+  Understat omits non-appearances and that would classify fringe, transferred,
+  or rarely-used players as absences.
+3. Treat every Understat `Sub` row as a position: Rejected because `Sub` is an
+  appearance role, not a playing position. Understat positional labels are
+  explicitly translated to FBref-compatible `GK`, `DF`, `DM`, `MF`, `AM`, and
+  `FW` labels; missing candidates inherit their last known non-`Sub` label.
+
+**Rationale:** Understat provides permitted, cached match appearance data but
+does not emit zero-minute rows. Restricting inferred absences to established
+pre-fixture key starters preserves point-in-time behavior and avoids fringe
+player false positives while reusing the existing consecutive-missed-games
+classification. A known limitation remains: without roster membership data, a
+mid-season transfer or season-long absence can still appear as a continuing
+absence and requires downstream review.
+
 ## 2026-08-21 — Task 2.1 Player Absence Classification Implementation
 
 **Decision:** Implement `src/adjustments/absence_classifier.py` and `notebooks/04_adjustments/01_absence_classification.ipynb` to map FBref player position strings into standard 4-group tags (`GK`, `DEF`, `MID`, `FWD`), compute point-in-time rolling minute shares (`starter_minute_share >= 0.45` in past 5 matches, shifted by `.shift(1)`), and tag missed starter appearances as `injury` ($\ge 2$ consecutive missed games) vs `rotation_suspension` ($1$ missed game).
