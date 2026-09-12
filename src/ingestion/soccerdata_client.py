@@ -69,6 +69,7 @@ class SoccerDataClient:
     ) -> None:
         self.config = config or SoccerDataConfig()
         self._fbref = fbref
+        self._fbref_season: str | None = "*" if fbref is not None else None
         self._clubelo = clubelo
         self._understat = understat
 
@@ -81,14 +82,19 @@ class SoccerDataClient:
         return f"{match.group(1)}-{match.group(2)}"
 
     def _reader(self, season: str) -> ScheduleReader:
-        if self._fbref is None:
+        normalized_season = self._season_name(season)
+        if self._fbref is None or (
+            self._fbref_season not in (None, "*")
+            and self._fbref_season != normalized_season
+        ):
             self._fbref = sd.FBref(
                 leagues=self.config.league,
-                seasons=self._season_name(season),
+                seasons=normalized_season,
                 no_cache=self.config.no_cache,
                 no_store=self.config.no_store,
                 headless=self.config.headless,
             )
+            self._fbref_season = normalized_season
         return self._fbref
 
     def _understat_seasons(self) -> tuple[str, ...]:

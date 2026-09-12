@@ -4,6 +4,53 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-09-07 — Correct Multi-Season Ingestion Coverage
+
+**Decision:** Correct the multi-season ingestion path so every season listed in
+`config.yaml` is fetched and saved under its own `data/raw/{season}/` directory.
+
+**Alternatives considered:**
+1. Keep the first-season-only behavior: Rejected because the notebook hardcoded
+  `config["data"]["seasons"][0]`, silently ignoring all subsequent configured
+  seasons.
+2. Fix only the notebook loop: Rejected because `SoccerDataClient` cached one
+  FBref reader instance, so a corrected loop could still silently return
+  season-one data for a season-two request.
+
+**Rationale:** The notebook now loops over all configured seasons with
+per-season output paths, and the client creates a fresh FBref reader whenever
+the requested season changes. This was a data-completeness bug rather than a
+modeling decision: it raised no error while limiting the entire downstream
+dataset to one season, which could have gone undetected through model
+evaluation.
+
+## 2026-09-07 — Injury-Adjusted Expected Goals Layer
+
+**Decision:** Add a one-row-per-fixture lambda adjustment layer combining the
+Poisson expected goals with classified player absences. FWD/MID absences reduce
+the affected team's scoring lambda; GK/DEF absences weaken that team's defense
+and increase the opponent's lambda. Positional weights are interpreted as
+impact multipliers above 1.0, so `1.05` means a 5% first-match reduction and
+`1.4` means a 40% first-match defensive increase. Subsequent absence matches
+apply `injury_decay ** (streak_position - 1)`.
+
+**Alternatives considered:**
+1. Persist two rows per fixture, one for each team: Rejected because the
+repository requires one persisted row per fixture; home and away lambdas are
+stored as separate columns.
+2. Apply GK/DEF absences to the absent team's own scoring lambda: Rejected
+because those positions affect defensive concession strength and therefore the
+opponent's scoring expectation.
+3. Apply the `min_absence_matches` empirical override now: Deferred because it
+requires enough player-specific historical instances to compare static
+subtraction with team-without-player performance.
+
+**Rationale:** The adjustment preserves the existing point-in-time absence
+classification while making the directional effect explicit. Understat and
+FBref use different fixture IDs, so exact ID matching is attempted first and
+unmatched rows are reconciled by normalized date and team; unresolved rows are
+reported rather than silently dropped.
+
 ## 2026-09-06 — Understat Appearance-Based Absence Sourcing
 
 **Decision:** Replace the placeholder/FBref-assumed player-log source with
