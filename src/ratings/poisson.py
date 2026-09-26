@@ -51,7 +51,10 @@ def prepare_glm_dataset(fixtures_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fit_poisson_ratings(
-    fixtures_df: pd.DataFrame, home_field_advantage: bool = True
+    fixtures_df: pd.DataFrame,
+    home_field_advantage: bool = True,
+    glm_l2_alpha: float = 0.05,
+    min_expected_goals: float = 0.05,
 ) -> tuple[dict[str, float], dict[str, float], float]:
     """Fit Poisson GLM on a set of past fixtures to estimate team attack and defense strength.
 
@@ -86,8 +89,16 @@ def fit_poisson_ratings(
     formula = "goals ~ home + C(team) + C(opponent)" if home_field_advantage else "goals ~ C(team) + C(opponent)"
 
     try:
-        model = smf.glm(formula=formula, data=glm_data, family=sm.families.Poisson()).fit()
+        model = smf.glm(formula=formula, data=glm_data, family=sm.families.Poisson()).fit_regularized(
+            method="elastic_net",
+            alpha=glm_l2_alpha,
+            L1_wt=0.0,
+            maxiter=1000,
+        )
         params = model.params
+
+        if not np.isfinite(params.to_numpy(dtype=float)).all():
+            raise ValueError("regularized Poisson coefficients are non-finite")
 
         # Base intercept + home advantage
         intercept = params.get("Intercept", 0.0)
@@ -124,6 +135,15 @@ def fit_poisson_ratings(
             team: float(np.exp(coef) / mean_def) for team, coef in opp_coefs.items()
         }
 
+        if any(
+            not np.isfinite(value) or value < min_expected_goals
+            for value in attack_ratings.values()
+        ) or any(
+            not np.isfinite(value) or value < min_expected_goals
+            for value in defense_ratings.values()
+        ) or not np.isfinite(home_adv_multiplier):
+            raise ValueError("regularized Poisson ratings failed sanity validation")
+
         return attack_ratings, defense_ratings, home_adv_multiplier
 
     except Exception:
@@ -132,25 +152,16 @@ def fit_poisson_ratings(
         avg_away_goals = glm_data[glm_data["home"] == 0]["goals"].mean() if not glm_data.empty else 1.1
         home_adv = (avg_home_goals / avg_away_goals) if avg_away_goals > 0 else 1.25
 
-        attack_ratings = {}
-        defense_ratings = {}
-        league_avg_goals = glm_data["goals"].mean() if not glm_data.empty else 1.3
-
-        for team in teams:
-            team_scored = glm_data[glm_data["team"] == team]["goals"].mean()
-            team_conceded = glm_data[glm_data["opponent"] == team]["goals"].mean()
-
-            att = (team_scored / league_avg_goals) if (pd.notna(team_scored) and league_avg_goals > 0) else 1.0
-            defn = (team_conceded / league_avg_goals) if (pd.notna(team_conceded) and league_avg_goals > 0) else 1.0
-
-            attack_ratings[team] = float(att)
-            defense_ratings[team] = float(defn)
-
-        return attack_ratings, defense_ratings, float(home_adv)
+        safe_ratings = {team: 1.0 for team in teams}
+        return safe_ratings, safe_ratings.copy(), float(home_adv)
 
 
 def compute_rolling_ratings(
-    fixtures_df: pd.DataFrame, window: int = 8, home_field_advantage: bool = True
+    fixtures_df: pd.DataFrame,
+    window: int = 8,
+    home_field_advantage: bool = True,
+    glm_l2_alpha: float = 0.05,
+    min_expected_goals: float = 0.05,
 ) -> pd.DataFrame:
     """Compute point-in-time Poisson attack/defense ratings using rolling N-match window.
 
@@ -183,6 +194,7 @@ def compute_rolling_ratings(
     away_def_list = []
     expected_home_list = []
     expected_away_list = []
+    fallback_list = []
 
     # Maintain team match history
     team_history: dict[str, list[int]] = {}
@@ -199,6 +211,7 @@ def compute_rolling_ratings(
             h_att, h_def = 1.0, 1.0
             a_att, a_def = 1.0, 1.0
             home_adv = 1.25
+            is_fallback = False
         else:
             # Filter past matches involving home_team or away_team in the last N matches
             home_past_indices = past_fixtures[
@@ -216,26 +229,71 @@ def compute_rolling_ratings(
                 h_att, h_def = 1.0, 1.0
                 a_att, a_def = 1.0, 1.0
                 home_adv = 1.25
+                is_fallback = False
             else:
-                att_map, def_map, home_adv = fit_poisson_ratings(
-                    subset_fixtures, home_field_advantage=home_field_advantage
-                )
-                h_att = att_map.get(home_team, 1.0)
-                h_def = def_map.get(home_team, 1.0)
-                a_att = att_map.get(away_team, 1.0)
-                a_def = def_map.get(away_team, 1.0)
+                try:
+                    att_map, def_map, home_adv = fit_poisson_ratings(
+                        subset_fixtures,
+                        home_field_advantage=home_field_advantage,
+                        glm_l2_alpha=glm_l2_alpha,
+                        min_expected_goals=min_expected_goals,
+                    )
+                    is_fallback = False
+                except (ValueError, FloatingPointError):
+                    league_average_goals = pd.concat(
+                        [subset_fixtures["home_goals"], subset_fixtures["away_goals"]]
+                    ).mean()
+                    h_att, h_def = 1.0, 1.0
+                    a_att, a_def = 1.0, 1.0
+                    home_adv = 1.25
+                    if pd.notna(league_average_goals) and league_average_goals > 0:
+                        home_goals = subset_fixtures["home_goals"].mean()
+                        away_goals = subset_fixtures["away_goals"].mean()
+                        home_adv = home_goals / away_goals if away_goals > 0 else 1.25
+                    is_fallback = True
+                if not is_fallback:
+                    h_att = att_map.get(home_team, 1.0)
+                    h_def = def_map.get(home_team, 1.0)
+                    a_att = att_map.get(away_team, 1.0)
+                    a_def = def_map.get(away_team, 1.0)
 
         # Baseline expected goal calculation
         league_avg_lambda = 1.35
+        if is_fallback:
+            league_avg_lambda = float(
+                pd.concat([subset_fixtures["home_goals"], subset_fixtures["away_goals"]]).mean()
+            )
+            if not np.isfinite(league_avg_lambda) or league_avg_lambda < min_expected_goals:
+                league_avg_lambda = 1.35
         exp_home = league_avg_lambda * h_att * a_def * (home_adv ** 0.5)
         exp_away = league_avg_lambda * a_att * h_def / (home_adv ** 0.5)
+
+        if (
+            not np.isfinite(exp_home)
+            or not np.isfinite(exp_away)
+            or exp_home < min_expected_goals
+            or exp_away < min_expected_goals
+        ):
+            is_fallback = True
+            fallback_average = pd.concat(
+                [past_fixtures["home_goals"], past_fixtures["away_goals"]]
+            ).mean()
+            league_avg_lambda = (
+                float(fallback_average)
+                if pd.notna(fallback_average) and fallback_average >= min_expected_goals
+                else 1.35
+            )
+            h_att, h_def, a_att, a_def, home_adv = 1.0, 1.0, 1.0, 1.0, 1.25
+            exp_home = league_avg_lambda * (home_adv ** 0.5)
+            exp_away = league_avg_lambda / (home_adv ** 0.5)
 
         home_att_list.append(h_att)
         home_def_list.append(h_def)
         away_att_list.append(a_att)
         away_def_list.append(a_def)
-        expected_home_list.append(round(float(exp_home), 3))
-        expected_away_list.append(round(float(exp_away), 3))
+        expected_home_list.append(round(max(float(exp_home), min_expected_goals), 3))
+        expected_away_list.append(round(max(float(exp_away), min_expected_goals), 3))
+        fallback_list.append(is_fallback)
 
     df["home_attack_rating"] = home_att_list
     df["home_defense_rating"] = home_def_list
@@ -243,5 +301,6 @@ def compute_rolling_ratings(
     df["away_defense_rating"] = away_def_list
     df["expected_home_goals"] = expected_home_list
     df["expected_away_goals"] = expected_away_list
+    df["is_fallback_rating"] = fallback_list
 
     return df

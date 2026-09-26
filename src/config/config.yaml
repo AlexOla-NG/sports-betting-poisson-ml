@@ -13,6 +13,8 @@ data:
 ratings:
   home_field_advantage: true
   rating_window: 8
+  glm_l2_alpha: 0.05
+  min_expected_goals: 0.05
 
 form:
   points_window: 5

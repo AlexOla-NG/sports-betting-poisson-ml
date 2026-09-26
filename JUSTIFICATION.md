@@ -4,6 +4,32 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-09-12 — Stabilize Rolling Poisson GLM Ratings
+
+**Decision:** Replace unregularized rolling Poisson GLM fitting with
+config-driven L2 ridge regularization (`glm_l2_alpha: 0.05`), validate fitted
+ratings and expected goals against finite/minimum thresholds, and mark any
+remaining invalid row with `is_fallback_rating` while using the rolling
+league-average goals rate as its conservative fallback.
+
+**Alternatives considered:**
+1. Widen the rolling window: Rejected because it would reduce responsiveness
+  to current team strength while not directly addressing quasi-complete
+  separation in small team-dummy windows.
+2. Firth penalized likelihood: Rejected because it is not natively available
+  for Poisson models in statsmodels and would add a separate estimation
+  implementation.
+3. Silently clamp zeros downstream in lambda adjustment: Rejected because
+  that would conceal the ratings-model failure and contaminate later
+  scoreline probabilities.
+
+**Rationale:** Quasi-complete separation caused rolling GLM coefficients to
+  diverge; exponentiation and three-decimal rounding then produced zero
+  expected goals for 180 of 760 fixtures. Ridge regularization resolved all
+  180 rows in the regenerated artifact, so the fallback path was not needed
+  for this dataset. The fallback remains explicit for future data and is
+  persisted through `is_fallback_rating` for downstream evaluation.
+
 ## 2026-09-07 — Correct Multi-Season Ingestion Coverage
 
 **Decision:** Correct the multi-season ingestion path so every season listed in

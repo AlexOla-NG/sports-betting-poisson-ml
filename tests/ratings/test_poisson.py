@@ -79,3 +79,29 @@ def test_compute_rolling_ratings_enforces_shift_one_no_leakage():
     assert ratings_df.loc[1, "fixture_id"] == "f2"
     assert ratings_df.loc[2, "fixture_id"] == "f3"
     assert att_before_f3 > att_before_f2
+
+
+def test_regularized_fit_handles_zero_conceded_team_without_zero_ratings():
+    fixtures = pd.DataFrame(
+        {
+            "fixture_id": [f"f{i}" for i in range(8)],
+            "date": pd.date_range("2024-08-01", periods=8, freq="7D"),
+            "home_team": ["Dominant"] * 8,
+            "away_team": ["Opponent"] * 8,
+            "home_goals": [2] * 8,
+            "away_goals": [0] * 8,
+        }
+    )
+
+    ratings = compute_rolling_ratings(
+        fixtures,
+        window=4,
+        glm_l2_alpha=0.05,
+        min_expected_goals=0.05,
+    )
+
+    assert ratings["expected_home_goals"].ge(0.05).all()
+    assert ratings["expected_away_goals"].ge(0.05).all()
+    assert ratings["expected_home_goals"].apply(np.isfinite).all()
+    assert ratings["expected_away_goals"].apply(np.isfinite).all()
+    assert "is_fallback_rating" in ratings.columns
