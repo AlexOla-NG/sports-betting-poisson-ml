@@ -105,29 +105,58 @@ def merge_match_stats(fixtures_df: pd.DataFrame, match_stats_df: pd.DataFrame) -
     # Standardize team names in both inputs
     fixtures = standardize_team_columns(fixtures, ["home_team", "away_team"])
 
-    # If match_stats contains 'team' and 'opponent' or 'fixture_id'/'game'
     if "team" in stats.columns:
-        stats = standardize_team_columns(stats, ["team", "opponent"])
+        stats = standardize_team_columns(stats, ["team"])
+    if "opponent" in stats.columns:
+        stats = standardize_team_columns(stats, ["opponent"])
 
-    # Extract team-level stats if available
-    # We aggregate stats by fixture_id if fixture_id is in stats, or by date + home/away team
     merged = fixtures.copy()
 
-    # Required numeric columns from stats if present
-    for stat_name in ["xG", "Sh", "SoT"]:
-        home_col = f"home_{stat_name.lower()}"
-        away_col = f"away_{stat_name.lower()}"
+    # If match_stats already contains fixture-level home_xg / away_xg or team-level xG
+    if "home_xg" in stats.columns and "away_xg" in stats.columns:
+        merged["home_xg"] = stats["home_xg"]
+        merged["away_xg"] = stats["away_xg"]
+    elif "xG" in stats.columns and "date" in stats.columns:
+        merged["date_str"] = pd.to_datetime(merged["date"]).dt.strftime("%Y-%m-%d")
+        stats["date_str"] = pd.to_datetime(stats["date"]).dt.strftime("%Y-%m-%d")
 
-        if stat_name in stats.columns and "fixture_id" in stats.columns:
-            # Map home stats
-            home_stats = stats.groupby(["fixture_id", "team"])[stat_name].first().unstack()
-            # If fixture_id matching is available, attempt fixture_id join
-            # Fallback to direct mapping if present in stats
+        home_stats = stats.set_index(["date_str", "team"])["xG"].to_dict()
         
-        if home_col not in merged.columns:
-            merged[home_col] = np.nan
-        if away_col not in merged.columns:
-            merged[away_col] = np.nan
+        home_xg_list = []
+        away_xg_list = []
+        for _, row in merged.iterrows():
+            d_str = row["date_str"]
+            h_team = row["home_team"]
+            a_team = row["away_team"]
+            home_xg_list.append(home_stats.get((d_str, h_team), np.nan))
+            away_xg_list.append(home_stats.get((d_str, a_team), np.nan))
+
+        merged["home_xg"] = home_xg_list
+        merged["away_xg"] = away_xg_list
+        merged = merged.drop(columns=["date_str"], errors="ignore")
+
+    # Handle Shots (Sh) and Shots on Target (SoT) if present
+    for stat_name, col_base in [("Sh", "sh"), ("SoT", "sot")]:
+        home_col = f"home_{col_base}"
+        away_col = f"away_{col_base}"
+        if stat_name in stats.columns and "date" in stats.columns and "team" in stats.columns:
+            stats["date_str"] = pd.to_datetime(stats["date"]).dt.strftime("%Y-%m-%d")
+            stat_dict = stats.set_index(["date_str", "team"])[stat_name].to_dict()
+            
+            merged["date_str"] = pd.to_datetime(merged["date"]).dt.strftime("%Y-%m-%d")
+            merged[home_col] = merged.apply(lambda r: stat_dict.get((r["date_str"], r["home_team"]), np.nan), axis=1)
+            merged[away_col] = merged.apply(lambda r: stat_dict.get((r["date_str"], r["away_team"]), np.nan), axis=1)
+            merged = merged.drop(columns=["date_str"], errors="ignore")
+        else:
+            if home_col not in merged.columns:
+                merged[home_col] = np.nan
+            if away_col not in merged.columns:
+                merged[away_col] = np.nan
+
+    if "home_xg" not in merged.columns:
+        merged["home_xg"] = np.nan
+    if "away_xg" not in merged.columns:
+        merged["away_xg"] = np.nan
 
     # Add missing xG indicator flag
     merged["is_xg_missing"] = merged["home_xg"].isna() | merged["away_xg"].isna()

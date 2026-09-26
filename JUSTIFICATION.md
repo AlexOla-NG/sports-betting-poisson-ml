@@ -4,6 +4,46 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-09-26 — Head-to-Head 32.1% Structural Missingness Verification (Task 4.1)
+
+**Decision:** Formally document that 244 missing rows (32.1%) in `h2h_home_win_rate` are 100% structural and expected, representing first-time dataset meetings and newly promoted teams rather than a join error.
+
+**Alternatives considered:**
+1. Imputing missing H2H win rates with 0.5 (equal expectation): Rejected for base feature generation to preserve explicit missing indicators for XGBoost tree splits.
+2. Including pre-dataset historical H2H data: Deferred to prevent potential historical data format inconsistencies.
+
+**Rationale:** Empirical breakdown reveals missing H2H rows concentrate 100% on (1) Season 1 opening fixtures (190 matches / 100% of Season 1 first-leg pairs) where no prior in-dataset match exists before the current date, and (2) Season 2 newly-promoted teams (54 matches for Sunderland, Leeds United, and Burnley). The date filtering (`date < current_date`) and team matching are 100% correct.
+
+## 2026-09-26 — Poisson Rating Differential Formula Sign Fix (Task 4.1)
+
+**Decision:** Correct the Poisson rating differential formula in `src/ml/feature_table.py` to `poisson_rating_diff = (home_attack_rating - away_attack_rating) + (away_defense_rating - home_defense_rating)`.
+
+**Alternatives considered:**
+1. Replacing `poisson_rating_diff` with `expected_home_goals - expected_away_goals`: Rejected. Pre-injury attack/defense rating differential ($0.835$ correlation with home win probability) represents team skill priors, whereas post-injury `adjusted_lambda_diff` ($0.890$ correlation) incorporates player availability adjustments. Keeping both provides distinct signals for XGBoost.
+2. Unchanged formula: Rejected because subtracting $def_A$ (where smaller means stronger defense) reversed defense contribution and collapsed correlation to near zero (-0.048).
+
+**Rationale:** In Poisson GLM conventions, defense ratings are concession multipliers where values $< 1.0$ indicate strong defense and $> 1.0$ indicate weak defense. Reversing the defense term sign ($def_A - def_H$) restores proper directionality and increases correlation with target outcomes to $-0.258$ against `target_encoded` and $+0.835$ against `mc_prob_home_win`.
+
+## 2026-09-26 — Expected Goals (xG) Understat Ingestion & Coverage Fix (Task 4.1)
+
+**Decision:** Update `SoccerDataClient.fetch_all_match_stats` in `src/ingestion/soccerdata_client.py` and `merge_match_stats` in `src/processing/clean_features.py` to ingest shooting statistics (`Sh`, `SoT`) from FBref and match-level `home_xg`/`away_xg` from Understat schedule statistics.
+
+**Alternatives considered:**
+1. Imputing missing xG with goal counts or rolling averages: Rejected. Imputing raw data creates artificial noise and conceals data-completeness bugs.
+2. FBref `"schedule"` endpoint only: Rejected because FBref `"schedule"` omits xG and shot metrics.
+
+**Rationale:** Integrating Understat schedule statistics populates 760 / 760 ($100\%$) fixture xG values, yielding 748 / 760 ($98.4\%$) non-null coverage for 8-match rolling xG form features (`home_xg_for_form`, `away_xg_for_form`, `xg_diff`) with `.shift(1)` non-leakage.
+
+## 2026-09-26 — Task 4.1 Feature Table Construction Implementation
+
+**Decision:** Implement `src/ml/feature_table.py` and `notebooks/06_ml/01_feature_table.ipynb` to merge all 4 upstream pipeline outputs (`clean_fixtures`, `ratings`, `adjusted_lambdas`, `mc_probabilities`) into a single fixture-level dataset for XGBoost training. Compute point-in-time non-leaking differential features (form, xG, Poisson attack/defense ratings, adjusted lambdas, rest days, head-to-head win rates, and `is_fallback_rating` indicators), persisting the result to `data/processed/feature_table.parquet`.
+
+**Alternatives considered:**
+1. Two-row per fixture team-perspective layout: Rejected per repository hard constraint (CONVENTIONS Rule 1). Single-row per fixture with home minus away differential features preserves fixture context and prevents dataset duplication.
+2. Inline re-derivation of Poisson and Monte Carlo ratings: Rejected. Upstream tasks (Task 1.3, Task 2.2, Task 3.2) compute point-in-time ratings and probabilities; Task 4.1 merges pre-computed upstream tables without re-estimating Poisson parameters.
+
+**Rationale:** Including both model-based features (Poisson attack/defense ratings, injury-adjusted lambdas, Monte Carlo probabilities) and empirical features (rolling form, xG diff, rest days, H2H statistics) alongside explicit fallback confidence flags (`is_fallback_rating`) enables XGBoost (Task 4.2) to learn systematically where Poisson and simulation layers under- or over-predict match outcomes.
+
 ## 2026-09-26 — Cold-Start Uniformity Analysis & Formal Acceptance
 
 **Decision:** Formally accept Season 1 Gameweek 1 cold-start rating uniformity ($\lambda_{\text{home}} = 1.509$, $\lambda_{\text{away}} = 1.207$ across row indices 0–9, representing 10 fixtures / 1.3% of dataset) as a non-impacting structural property of point-in-time expanding window initialization.

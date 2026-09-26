@@ -6,16 +6,21 @@ notebook and downstream Parquet outputs while avoiding custom website scrapers.
 """
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import re
 from typing import Protocol
 
+import numpy as np
 import pandas as pd
 import soccerdata as sd
 
 from src.config.loader import load_config
+
+logger = logging.getLogger(__name__)
 
 
 class ScheduleReader(Protocol):
@@ -180,6 +185,9 @@ class SoccerDataClient:
     def fetch_all_match_stats(self, season: str) -> pd.DataFrame:
         """Fetch and sanitize team match statistics for an entire season.
 
+        Combines schedule stats with shooting stats (Sh, SoT) and Understat
+        expected goals (xG).
+
         Parameters
         ----------
         season : str
@@ -191,7 +199,64 @@ class SoccerDataClient:
             Team match statistics with normalized numeric data types.
         """
         reader = self._reader(season)
-        stats = reader.read_team_match_stats(stat_type="schedule").reset_index()
+        sched_stats = reader.read_team_match_stats(stat_type="schedule")
+
+        if isinstance(reader, sd.FBref):
+            try:
+                shooting_stats = reader.read_team_match_stats(stat_type="shooting")
+                if isinstance(shooting_stats.columns, pd.MultiIndex):
+                    shooting_stats.columns = [
+                        "_".join([str(c) for c in col if c != ""]).strip("_")
+                        for col in shooting_stats.columns
+                    ]
+                
+                sh_cols = [c for c in shooting_stats.columns if c in ["Standard_Sh", "Sh"]]
+                sot_cols = [c for c in shooting_stats.columns if c in ["Standard_SoT", "SoT"]]
+
+                if sh_cols:
+                    sched_stats["Sh"] = shooting_stats[sh_cols[0]]
+                if sot_cols:
+                    sched_stats["SoT"] = shooting_stats[sot_cols[0]]
+            except Exception as e:
+                logger.warning("Could not fetch FBref shooting stats: %s", e)
+
+        # Retrieve Understat xG for fixture-level xG matching
+        try:
+            understat_season = self._season_name(season)
+            understat_reader = sd.Understat(
+                leagues=self.config.league,
+                seasons=understat_season,
+            )
+            u_sched = understat_reader.read_schedule().reset_index()
+            u_sched["date_str"] = pd.to_datetime(u_sched["date"]).dt.strftime("%Y-%m-%d")
+
+            # Reset sched_stats index for merging
+            stats_df = sched_stats.reset_index() if isinstance(sched_stats.index, pd.MultiIndex) or sched_stats.index.name else sched_stats.copy()
+            if "date" in stats_df.columns:
+                stats_df["date_str"] = pd.to_datetime(stats_df["date"]).dt.strftime("%Y-%m-%d")
+
+                # Standardize team names for Understat join
+                stats_df["team_std"] = stats_df["team"].apply(lambda x: str(x).strip())
+                u_sched["home_std"] = u_sched["home_team"].apply(lambda x: str(x).strip())
+                u_sched["away_std"] = u_sched["away_team"].apply(lambda x: str(x).strip())
+
+                home_xg_map = u_sched.set_index(["date_str", "home_std"])["home_xg"].to_dict()
+                away_xg_map = u_sched.set_index(["date_str", "away_std"])["away_xg"].to_dict()
+
+                xg_values = []
+                for _, r in stats_df.iterrows():
+                    key = (r["date_str"], r["team_std"])
+                    xg_val = home_xg_map.get(key, away_xg_map.get(key, np.nan))
+                    xg_values.append(xg_val)
+
+                stats_df["xG"] = xg_values
+                stats = stats_df.drop(columns=["date_str", "team_std"], errors="ignore")
+            else:
+                stats = stats_df
+        except Exception as e:
+            logger.warning("Could not fetch Understat xG: %s", e)
+            stats = sched_stats.reset_index() if isinstance(sched_stats.index, pd.MultiIndex) or sched_stats.index.name else sched_stats.copy()
+
         return self._sanitize_match_stats(stats)
 
     def fetch_match_stats(self, fixture_id: str) -> pd.DataFrame:
@@ -319,17 +384,38 @@ class SoccerDataClient:
         return frame.sort_values(["date", "fixture_id", "team", "player_id"]).reset_index(drop=True)
 
     def fetch_elo(self, date: str | datetime | None = None) -> pd.DataFrame:
-        """Fetch ClubElo ratings for an optional date.
+        """Fetch ClubElo ratings for an optional date with 3-attempt backoff retries.
 
         Elo is an additional feature for later ML stages; it does not replace
-        the pipeline's Poisson attack and defense ratings.
+        the pipeline's Poisson attack and defense ratings. If external ClubElo API
+        is unavailable after retries, returns an empty DataFrame cleanly with a warning.
         """
-        if self._clubelo is None:
-            self._clubelo = sd.ClubElo(
-                no_cache=self.config.no_cache,
-                no_store=self.config.no_store,
-            )
-        return self._clubelo.read_by_date(date=date).reset_index(drop=True)
+        max_retries = 3
+        backoff_sec = 1.0
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                if self._clubelo is None:
+                    self._clubelo = sd.ClubElo(
+                        no_cache=self.config.no_cache,
+                        no_store=self.config.no_store,
+                    )
+                df_elo = self._clubelo.read_by_date(date=date)
+                if df_elo is not None and len(df_elo) > 0:
+                    return df_elo.reset_index(drop=True)
+            except Exception as e:
+                logger.warning(
+                    "ClubElo fetch attempt %d/%d failed: %s", attempt, max_retries, e
+                )
+                if attempt < max_retries:
+                    time.sleep(backoff_sec)
+                    backoff_sec *= 2.0
+
+        logger.warning(
+            "ClubElo API unavailable after %d attempts. Returning empty Elo DataFrame.",
+            max_retries,
+        )
+        return pd.DataFrame(columns=["team", "elo", "date"])
 
     @staticmethod
     def save_parquet(df: pd.DataFrame, path: str) -> None:

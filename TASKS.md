@@ -213,10 +213,10 @@ cross-join all players against all fixtures.
 - Output: `data/processed/feature_table.parquet`.
 
 **Acceptance criteria:**
-- [ ] Module tested for leakage (verify shift(1) on rolling features).
-- [ ] Notebook shows feature correlations, missing-value rates.
-- [ ] Config-driven windows.
-- [ ] JUSTIFICATION entry for feature selection.
+- [x] Module tested for leakage (verify shift(1) on rolling features).
+- [x] Notebook shows feature correlations, missing-value rates.
+- [x] Config-driven windows.
+- [x] JUSTIFICATION entry for feature selection.
 
 ---
 
