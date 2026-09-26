@@ -100,3 +100,8 @@ def get_xg_windows(config: dict[str, Any]) -> tuple[int, int]:
 def get_mc_trials(config: dict[str, Any]) -> int:
     """Return number of Monte Carlo trials per fixture."""
     return config["monte_carlo"]["num_trials"]
+
+
+def get_max_goals(config: dict[str, Any]) -> int:
+    """Return maximum goal count bound for scoreline matrix simulation."""
+    return config.get("simulation", {}).get("max_goals", 6)

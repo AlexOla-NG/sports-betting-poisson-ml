@@ -4,6 +4,16 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-09-26 — Poisson Scoreline Matrix Simulation Implementation (Task 3.1)
+
+**Decision:** Implement `src/simulation/scoreline_matrix.py` and `notebooks/05_simulation/01_scoreline_matrix.ipynb` to construct bivariate independent Poisson scoreline grids bounded by `max_goals = 6` (read from `config.yaml`). Extract derived 1X2 win/draw/loss probabilities, Over/Under 2.5 goal totals, Both Teams To Score (BTTS), and most likely exact scorelines, persisting the result to `data/processed/scoreline_probabilities.parquet`.
+
+**Alternatives considered:**
+1. Unlimited matrix grid size ($N \to \infty$): Rejected because a $7 \times 7$ matrix (0 to 6 goals) captures $>99.9\%$ of probability mass for typical football expected goals ($\lambda \approx 1.0 - 3.0$) while keeping computation instant and memory fixed. Grid values are truncated and re-normalized so probabilities sum strictly to 1.0.
+2. Bivariate Dixon-Coles dependence parameter ($\tau$ adjustment): Deferred to simulation refinement stage. Basic independent Poisson matrices provide a clean baseline for scoreline grids before adding low-score correlation adjustments ($\tau$).
+
+**Rationale:** Generating full scoreline probability matrices enables single-pass extraction of 1X2 match odds, totals, and props while creating the input structures needed for downstream Monte Carlo simulation (Task 3.2).
+
 ## 2026-09-12 — Stabilize Rolling Poisson GLM Ratings
 
 **Decision:** Replace unregularized rolling Poisson GLM fitting with

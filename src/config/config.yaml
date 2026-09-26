@@ -46,6 +46,9 @@ monte_carlo:
   num_trials: 10000
   random_seed: 42
 
+simulation:
+  max_goals: 6
+
 ml:
   xgboost:
     max_depth: 4

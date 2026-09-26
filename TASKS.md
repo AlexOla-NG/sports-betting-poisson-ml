@@ -170,9 +170,9 @@ cross-join all players against all fixtures.
 - Output: scoreline probability matrix (7x7 grid for 0-6 goals each).
 
 **Acceptance criteria:**
-- [ ] Module tested against known Poisson calculations.
-- [ ] Notebook visualizes heatmap for sample fixtures.
-- [ ] JUSTIFICATION entry for max_goals choice.
+- [x] Module tested against known Poisson calculations.
+- [x] Notebook visualizes heatmap for sample fixtures.
+- [x] JUSTIFICATION entry for max_goals choice.
 
 ---
 
