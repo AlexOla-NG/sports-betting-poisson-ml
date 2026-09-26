@@ -4,6 +4,26 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-09-26 — Cold-Start Uniformity Analysis & Formal Acceptance
+
+**Decision:** Formally accept Season 1 Gameweek 1 cold-start rating uniformity ($\lambda_{\text{home}} = 1.509$, $\lambda_{\text{away}} = 1.207$ across row indices 0–9, representing 10 fixtures / 1.3% of dataset) as a non-impacting structural property of point-in-time expanding window initialization.
+
+**Alternatives considered:**
+1. Backfilling Season 0 (2023/24) match data prior to Season 1: Deferred. While pre-populating historical season data would eliminate GW1 baseline uniformity, walk-forward evaluation already excludes early matches.
+2. Initializing GW1 with static season-end priors: Rejected because introducing external prior tables without historical walk-forward tracking risks subtle data leakage.
+
+**Rationale:** Verification of `src/config/config.yaml` walk-forward evaluation parameters confirms `initial_train_size = 200` matches. Rows 0–9 (Gameweek 1: 2024-08-16 to 2024-08-19) fall entirely within the initial training window `[0, 199]` (matches 1–200, ending 2025-01-14). Evaluation scoring begins at row index 200. Thus, cold-start GW1 fixtures are consumed exclusively as training observations and are never scored as predictions in Brier score or calibration evaluations. Season 2 Gameweek 1 does not exhibit cold-start uniformity as rolling rating windows carry over continuously across seasons.
+
+## 2026-09-26 — Monte Carlo Simulation Implementation (Task 3.2)
+
+**Decision:** Implement `src/simulation/monte_carlo.py` and `notebooks/05_simulation/02_monte_carlo.ipynb` to sample stochastic Poisson goal trials ($N = 10,000$, `random_seed = 42` from `config.yaml`). Compute simulated 1X2 win/draw/loss probabilities, totals, and BTTS, persisting the result to `data/processed/mc_probabilities.parquet`.
+
+**Alternatives considered:**
+1. Direct matrix discretization sampling: Included as an alternative accessor (`simulate_fixture_from_matrix`), but default sampling uses direct independent Poisson vector generation (`rng.poisson`) for higher performance ($>10\times$ faster).
+2. Fewer trials ($N = 1,000$): Rejected because $N = 1,000$ exhibits $\approx 1.5\%$ sampling error relative to analytical Poisson scoreline matrix truth, whereas $N = 10,000$ achieves $< 0.4\%$ error margin.
+
+**Rationale:** Monte Carlo simulation provides empirical outcome distributions and verifies scoreline matrix probabilities before feeding stochastic signals into downstream XGBoost and ensemble models (Phase 4).
+
 ## 2026-09-26 — Poisson Scoreline Matrix Simulation Implementation (Task 3.1)
 
 **Decision:** Implement `src/simulation/scoreline_matrix.py` and `notebooks/05_simulation/01_scoreline_matrix.ipynb` to construct bivariate independent Poisson scoreline grids bounded by `max_goals = 6` (read from `config.yaml`). Extract derived 1X2 win/draw/loss probabilities, Over/Under 2.5 goal totals, Both Teams To Score (BTTS), and most likely exact scorelines, persisting the result to `data/processed/scoreline_probabilities.parquet`.

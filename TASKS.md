@@ -189,10 +189,10 @@ cross-join all players against all fixtures.
 - Output: `data/processed/mc_probabilities.parquet`.
 
 **Acceptance criteria:**
-- [ ] Module tested for convergence (100 vs 1k vs 10k trials).
-- [ ] Notebook shows convergence plot, saves probabilities.
-- [ ] Config-driven trial count.
-- [ ] JUSTIFICATION entry for trial count rationale.
+- [x] Module tested for convergence (100 vs 1k vs 10k trials).
+- [x] Notebook shows convergence plot, saves probabilities.
+- [x] Config-driven trial count.
+- [x] JUSTIFICATION entry for trial count rationale.
 
 ---
 

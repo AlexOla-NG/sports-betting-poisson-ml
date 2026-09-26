@@ -102,6 +102,11 @@ def get_mc_trials(config: dict[str, Any]) -> int:
     return config["monte_carlo"]["num_trials"]
 
 
+def get_random_seed(config: dict[str, Any]) -> int:
+    """Return default random seed for simulation reproducibility."""
+    return config["monte_carlo"].get("random_seed", 42)
+
+
 def get_max_goals(config: dict[str, Any]) -> int:
     """Return maximum goal count bound for scoreline matrix simulation."""
     return config.get("simulation", {}).get("max_goals", 6)
