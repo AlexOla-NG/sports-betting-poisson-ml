@@ -254,10 +254,10 @@ cross-join all players against all fixtures.
 - Output: `data/processed/ensemble_probabilities.parquet`.
 
 **Acceptance criteria:**
-- [ ] Module tested for probability sum = 1.
-- [ ] Notebook compares blended vs. Poisson-only Brier scores.
-- [ ] Config-driven weights.
-- [ ] JUSTIFICATION entry for blend ratio.
+- [x] Module tested for probability sum = 1.
+- [x] Notebook compares blended vs. Poisson-only Brier scores.
+- [x] Config-driven weights.
+- [x] JUSTIFICATION entry for blend ratio.
 
 ---
 

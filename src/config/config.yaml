@@ -61,8 +61,14 @@ ml:
     reg_alpha: 1.5
     reg_lambda: 4.0
   ensemble_weights:
-    poisson_mc: 0.5
-    xgboost: 0.5
+    poisson_mc: 0.2
+    xgboost: 0.8
+    selected_candidate: "blend_context"
+  ensemble_grid:
+    candidate_weights: [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
+    primary_metric: "brier_score"
+    tie_break_metric: "log_loss"
+    tolerance: 0.000001
 
 evaluation:
   target_brier_score: 0.20

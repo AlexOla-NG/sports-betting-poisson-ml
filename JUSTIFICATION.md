@@ -4,6 +4,28 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-10-10 — OOF MC/XGBoost Ensemble Selection
+
+**Decision:** Evaluate MC-only, full 51-feature XGBoost, context-only
+XGBoost, and 0.05-step MC/XGBoost blends on the common 560-fixture OOF
+population. Select `blend_context` with XGBoost weight `0.80` and MC weight
+`0.20` using lowest multiclass summed Brier score, with log loss as the tie
+break.
+
+**Alternatives considered:**
+1. Reuse the historical 0.5/0.5 weights: Rejected because the blend must be
+  selected empirically rather than fixed arbitrarily.
+2. Use in-sample or final-model probabilities: Rejected because Task 4.3
+  requires strictly OOF chronological evaluation.
+3. Select the full XGBoost candidate: Rejected by the observed OOF results;
+  the context-only blend performed better on the common population.
+
+**Rationale:** MC-only scored Brier `0.660588`, full XGBoost scored `0.615997`,
+context-only XGBoost scored `0.615730`, and the selected 0.80/0.20 context
+blend scored `0.612993` with log loss `1.023682`. The prior 0.5/0.5 defaults
+were preserved in this justification history; config now records the selected
+weights. No Task 5.1 calibration work is included.
+
 ## 2026-10-10 — OOF XGBoost Importance and Ablation Validation
 
 **Decision:** Validate feature contribution with permutation importance and
