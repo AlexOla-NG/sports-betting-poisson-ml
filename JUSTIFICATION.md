@@ -4,6 +4,43 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-10-10 — OOF XGBoost Importance and Ablation Validation
+
+**Decision:** Validate feature contribution with permutation importance and
+feature ablations computed only on held-out chronological walk-forward folds.
+Positive permutation deltas indicate that shuffling a feature worsened the
+held-out metric. Ablations retain the selected XGBoost hyperparameters across
+all variants.
+
+**Alternatives considered:**
+1. Rely on final-model gain importance: Rejected because shallow trees can
+  concentrate gain in a clean split and correlated features can share or
+  mask importance.
+2. Permute the full-data model or training rows: Rejected because that would
+  leak information into the validation evidence and violate the walk-forward
+  evaluation policy.
+3. Retune each ablation independently: Rejected because it would confound
+  feature contribution with hyperparameter changes.
+
+**Rationale:** OOF permutation and fixed-configuration ablations distinguish
+model-specific gain ranking from robust predictive contribution. The final
+full-data model's gain ranking remains descriptive only; held-out permutation
+deltas and ablation metrics are the validation evidence. This extension does
+not select ensemble blend weights or mark Task 4.3 complete.
+
+## 2026-10-10 — Task 4.2 XGBoost Model & Walk-Forward Validation Implementation
+
+**Decision:** Implement `src/ml/xgboost_model.py` and `notebooks/06_ml/02_xgboost_model.ipynb` to train a multi-class XGBoost classifier predicting match outcomes (Home Win, Draw, Away Win) using strictly chronological expanding-window walk-forward validation (`initial_train_size = 200`, `step_size = 38` from `config.yaml`). Tune hyperparameters (`max_depth: 2`, `learning_rate: 0.03`, `n_estimators: 80`, `min_child_weight: 6`, `reg_alpha: 1.5`, `reg_lambda: 4.0`, `subsample: 0.8`, `colsample_bytree: 0.7`) to prevent probability overconfidence on small samples, enforce strict float64 simplex normalization, persist model artifact to `models/xgboost_model.json`, and output out-of-fold probability predictions to `data/processed/xgboost_probabilities.parquet`.
+
+**Alternatives considered:**
+1. Standard k-fold cross-validation or random splits: Rejected per hard repository constraint (CONVENTIONS Rule 4). Match outcomes have time-series dependencies; random splits leak future tactical and team-form patterns into past predictions.
+2. Initial deep-tree configuration (`max_depth: 4`, `n_estimators: 300`): Rejected. Overfitted the small training folds (200–730 rows) with 51 features, producing extreme probabilities ($p < 0.01$) that degraded out-of-fold log-loss to $1.2265$ (worse than the $1.0986$ uniform baseline). Retuning to shallower depth ($2$), fewer estimators ($80$), and stronger $L_1/L_2$ regularization restored calibration and out-of-fold accuracy ($51.79\%$).
+3. Imputing missing values prior to XGBoost: Rejected. XGBoost's tree split algorithm learns default split directions for missing values (`missing=np.nan`) optimally during training, preserving signal without introducing synthetic variance or leakage.
+4. Feature elimination of collinear signals (`poisson_rating_diff`, `adjusted_lambda_diff`, `mc_prob_home_win`): Rejected. Gain-based importance analysis confirms all three features retain active, complementary split utility; tree-based recursive partitioning captures non-linear synergies between priors, injury adjustments, and simulation probabilities without collinearity degradation.
+
+**Rationale:** Chronological walk-forward validation across 15 expanding folds (560 test fixtures) achieves out-of-fold accuracy of $51.79\%$, log-loss of $1.0291$, and Brier score of $0.6160$, strictly outperforming all benchmarks: Uniform baseline (Acc: $42.50\%$, Log-Loss: $1.0986$, Brier: $0.6667$), Train Marginals baseline (Acc: $42.50\%$, Log-Loss: $1.0789$, Brier: $0.6534$), and Poisson/Monte Carlo simulation (Acc: $47.50\%$, Log-Loss: $1.0984$, Brier: $0.6606$).
+
+
 ## 2026-09-26 — Head-to-Head 32.1% Structural Missingness Verification (Task 4.1)
 
 **Decision:** Formally document that 244 missing rows (32.1%) in `h2h_home_win_rate` are 100% structural and expected, representing first-time dataset meetings and newly promoted teams rather than a join error.

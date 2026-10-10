@@ -48,40 +48,6 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
 
 # Convenience accessors for commonly-used values
 
-    def get_rating_window(config: dict[str, Any]) -> int:
-        """Get the rolling window length for rating calculations.
-
-        Parameters
-        ----------
-        config : dict[str, Any]
-            Configuration dictionary from load_config().
-
-        Returns
-        -------
-        int
-            Number of matches to use for rolling rating calculations.
-        """
-        return config["ratings"]["rating_window"]
-
-
-    def get_form_windows(config: dict[str, Any]) -> tuple[int, int]:
-        """Get the rolling window lengths for form (points and goals).
-
-        Parameters
-        ----------
-        config : dict[str, Any]
-            Configuration dictionary from load_config().
-
-        Returns
-        -------
-        tuple[int, int]
-            (points_window, goals_window) — rolling windows for form calculations.
-        """
-        return (
-            config["form"]["points_window"],
-            config["form"]["goals_window"],
-        )
-
 def get_rating_window(config: dict[str, Any]) -> int:
     """Return the rolling window for Poisson attack/defense ratings."""
     return config["ratings"]["rating_window"]
@@ -110,3 +76,14 @@ def get_random_seed(config: dict[str, Any]) -> int:
 def get_max_goals(config: dict[str, Any]) -> int:
     """Return maximum goal count bound for scoreline matrix simulation."""
     return config.get("simulation", {}).get("max_goals", 6)
+
+
+def get_xgboost_params(config: dict[str, Any]) -> dict[str, Any]:
+    """Return XGBoost hyperparameters from config dictionary."""
+    return config.get("ml", {}).get("xgboost", {})
+
+
+def get_walk_forward_params(config: dict[str, Any]) -> tuple[int, int]:
+    """Return (initial_train_size, step_size) for walk-forward validation."""
+    eval_cfg = config.get("evaluation", {})
+    return eval_cfg.get("initial_train_size", 200), eval_cfg.get("step_size", 38)

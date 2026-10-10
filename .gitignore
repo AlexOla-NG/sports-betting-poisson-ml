@@ -46,6 +46,7 @@ downloaded_files/
 # Data (per CONVENTIONS.md)
 data/raw/
 data/processed/
+models/
 
 # OS
 .DS_Store

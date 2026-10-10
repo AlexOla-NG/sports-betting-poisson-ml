@@ -233,10 +233,11 @@ cross-join all players against all fixtures.
 - Output: trained model artifact, feature importance report.
 
 **Acceptance criteria:**
-- [ ] Module tested with synthetic data, verifies walk-forward logic.
-- [ ] Notebook shows feature importance, validation metrics.
-- [ ] Config-driven hyperparameters.
-- [ ] JUSTIFICATION entry for XGBoost over alternatives.
+- [x] Module tested with synthetic data, verifies walk-forward logic.
+- [x] Notebook shows feature importance, validation metrics.
+- [x] OOF permutation importance and fixed-hyperparameter ablation validation added.
+- [x] Config-driven hyperparameters.
+- [x] JUSTIFICATION entry for XGBoost over alternatives.
 
 ---
 
