@@ -220,6 +220,39 @@ class SoccerDataClient:
             except Exception as e:
                 logger.warning("Could not fetch FBref shooting stats: %s", e)
 
+        # Reset sched_stats index for merging
+        stats_df = (
+            sched_stats.reset_index()
+            if isinstance(sched_stats.index, pd.MultiIndex) or sched_stats.index.name
+            else sched_stats.copy()
+        )
+
+        # Extract fixture_id from match_report if not already present
+        if "fixture_id" not in stats_df.columns and "match_report" in stats_df.columns:
+            extracted_fid = stats_df["match_report"].astype("string").str.extract(r"/matches/([a-f0-9]+)/")[0]
+            if extracted_fid.notna().any():
+                stats_df["fixture_id"] = extracted_fid
+
+        # Recover team if missing or completely null (FBref reader can put NaN for team in schedule stats)
+        if "team" not in stats_df.columns or stats_df["team"].isna().all():
+            try:
+                fixtures = self.fetch_fixtures(season=season)
+                if "fixture_id" in stats_df.columns and "venue" in stats_df.columns and "home_team" in fixtures.columns:
+                    f_map = fixtures.set_index("fixture_id")[["home_team", "away_team"]].to_dict(orient="index")
+                    recovered_teams = []
+                    for _, row in stats_df.iterrows():
+                        fid = row.get("fixture_id")
+                        ven = str(row.get("venue", "")).strip().lower()
+                        if fid in f_map:
+                            recovered_teams.append(
+                                f_map[fid]["home_team"] if ven == "home" else f_map[fid]["away_team"]
+                            )
+                        else:
+                            recovered_teams.append(np.nan)
+                    stats_df["team"] = recovered_teams
+            except Exception as e:
+                logger.warning("Could not derive team column from fixtures: %s", e)
+
         # Retrieve Understat xG for fixture-level xG matching
         try:
             understat_season = self._season_name(season)
@@ -230,15 +263,19 @@ class SoccerDataClient:
             u_sched = understat_reader.read_schedule().reset_index()
             u_sched["date_str"] = pd.to_datetime(u_sched["date"]).dt.strftime("%Y-%m-%d")
 
-            # Reset sched_stats index for merging
-            stats_df = sched_stats.reset_index() if isinstance(sched_stats.index, pd.MultiIndex) or sched_stats.index.name else sched_stats.copy()
-            if "date" in stats_df.columns:
+            if "date" in stats_df.columns and "team" in stats_df.columns:
+                try:
+                    from src.processing.clean_features import standardize_team_name
+                except ImportError:
+                    def standardize_team_name(x):
+                        return str(x).strip()
+
                 stats_df["date_str"] = pd.to_datetime(stats_df["date"]).dt.strftime("%Y-%m-%d")
 
                 # Standardize team names for Understat join
-                stats_df["team_std"] = stats_df["team"].apply(lambda x: str(x).strip())
-                u_sched["home_std"] = u_sched["home_team"].apply(lambda x: str(x).strip())
-                u_sched["away_std"] = u_sched["away_team"].apply(lambda x: str(x).strip())
+                stats_df["team_std"] = stats_df["team"].apply(standardize_team_name)
+                u_sched["home_std"] = u_sched["home_team"].apply(standardize_team_name)
+                u_sched["away_std"] = u_sched["away_team"].apply(standardize_team_name)
 
                 home_xg_map = u_sched.set_index(["date_str", "home_std"])["home_xg"].to_dict()
                 away_xg_map = u_sched.set_index(["date_str", "away_std"])["away_xg"].to_dict()
@@ -250,14 +287,11 @@ class SoccerDataClient:
                     xg_values.append(xg_val)
 
                 stats_df["xG"] = xg_values
-                stats = stats_df.drop(columns=["date_str", "team_std"], errors="ignore")
-            else:
-                stats = stats_df
+                stats_df = stats_df.drop(columns=["date_str", "team_std"], errors="ignore")
         except Exception as e:
             logger.warning("Could not fetch Understat xG: %s", e)
-            stats = sched_stats.reset_index() if isinstance(sched_stats.index, pd.MultiIndex) or sched_stats.index.name else sched_stats.copy()
 
-        return self._sanitize_match_stats(stats)
+        return self._sanitize_match_stats(stats_df)
 
     def fetch_match_stats(self, fixture_id: str) -> pd.DataFrame:
         """Fetch team match statistics for one FBref game ID."""

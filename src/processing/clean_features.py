@@ -112,40 +112,40 @@ def merge_match_stats(fixtures_df: pd.DataFrame, match_stats_df: pd.DataFrame) -
 
     merged = fixtures.copy()
 
-    # If match_stats already contains fixture-level home_xg / away_xg or team-level xG
-    if "home_xg" in stats.columns and "away_xg" in stats.columns:
+    # If match_stats already contains fixture-level home_xg / away_xg
+    if "home_xg" in stats.columns and "away_xg" in stats.columns and len(stats) == len(merged):
         merged["home_xg"] = stats["home_xg"]
         merged["away_xg"] = stats["away_xg"]
-    elif "xG" in stats.columns and "date" in stats.columns:
+    elif "fixture_id" in stats.columns and "venue" in stats.columns and "xG" in stats.columns:
+        home_s = stats[stats["venue"].astype(str).str.lower() == "home"].set_index("fixture_id")
+        away_s = stats[stats["venue"].astype(str).str.lower() == "away"].set_index("fixture_id")
+        merged["home_xg"] = merged["fixture_id"].map(home_s["xG"]).astype("Float64")
+        merged["away_xg"] = merged["fixture_id"].map(away_s["xG"]).astype("Float64")
+    elif "xG" in stats.columns and "date" in stats.columns and "team" in stats.columns:
         merged["date_str"] = pd.to_datetime(merged["date"]).dt.strftime("%Y-%m-%d")
         stats["date_str"] = pd.to_datetime(stats["date"]).dt.strftime("%Y-%m-%d")
 
-        home_stats = stats.set_index(["date_str", "team"])["xG"].to_dict()
-        
-        home_xg_list = []
-        away_xg_list = []
-        for _, row in merged.iterrows():
-            d_str = row["date_str"]
-            h_team = row["home_team"]
-            a_team = row["away_team"]
-            home_xg_list.append(home_stats.get((d_str, h_team), np.nan))
-            away_xg_list.append(home_stats.get((d_str, a_team), np.nan))
-
-        merged["home_xg"] = home_xg_list
-        merged["away_xg"] = away_xg_list
+        team_stats = stats.set_index(["date_str", "team"])["xG"].to_dict()
+        merged["home_xg"] = merged.apply(lambda r: team_stats.get((r["date_str"], r["home_team"]), np.nan), axis=1).astype("Float64")
+        merged["away_xg"] = merged.apply(lambda r: team_stats.get((r["date_str"], r["away_team"]), np.nan), axis=1).astype("Float64")
         merged = merged.drop(columns=["date_str"], errors="ignore")
 
     # Handle Shots (Sh) and Shots on Target (SoT) if present
     for stat_name, col_base in [("Sh", "sh"), ("SoT", "sot")]:
         home_col = f"home_{col_base}"
         away_col = f"away_{col_base}"
-        if stat_name in stats.columns and "date" in stats.columns and "team" in stats.columns:
+        if "fixture_id" in stats.columns and "venue" in stats.columns and stat_name in stats.columns:
+            home_s = stats[stats["venue"].astype(str).str.lower() == "home"].set_index("fixture_id")
+            away_s = stats[stats["venue"].astype(str).str.lower() == "away"].set_index("fixture_id")
+            merged[home_col] = merged["fixture_id"].map(home_s[stat_name]).astype("Float64")
+            merged[away_col] = merged["fixture_id"].map(away_s[stat_name]).astype("Float64")
+        elif stat_name in stats.columns and "date" in stats.columns and "team" in stats.columns:
             stats["date_str"] = pd.to_datetime(stats["date"]).dt.strftime("%Y-%m-%d")
             stat_dict = stats.set_index(["date_str", "team"])[stat_name].to_dict()
             
             merged["date_str"] = pd.to_datetime(merged["date"]).dt.strftime("%Y-%m-%d")
-            merged[home_col] = merged.apply(lambda r: stat_dict.get((r["date_str"], r["home_team"]), np.nan), axis=1)
-            merged[away_col] = merged.apply(lambda r: stat_dict.get((r["date_str"], r["away_team"]), np.nan), axis=1)
+            merged[home_col] = merged.apply(lambda r: stat_dict.get((r["date_str"], r["home_team"]), np.nan), axis=1).astype("Float64")
+            merged[away_col] = merged.apply(lambda r: stat_dict.get((r["date_str"], r["away_team"]), np.nan), axis=1).astype("Float64")
             merged = merged.drop(columns=["date_str"], errors="ignore")
         else:
             if home_col not in merged.columns:
