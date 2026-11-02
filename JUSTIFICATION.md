@@ -4,6 +4,17 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-11-02 — Task 5.1 Calibration Evaluation Implementation
+
+**Decision:** Implement `src/evaluation/calibration.py`, `notebooks/07_evaluation/01_calibration.ipynb`, and `tests/evaluation/test_calibration.py` to evaluate the calibration of the selected out-of-fold (OOF) ensemble model (`blend_context`, 80% context-XGBoost / 20% Monte Carlo, 560 fixtures). Use strictly proper scoring rules (multiclass Brier score and multi-class log loss) as primary optimization and evaluation metrics, supplemented by 10-bin one-vs-rest reliability diagrams, Expected Calibration Error (ECE), and chronological monthly Brier trend diagnostics. Persist evaluation artifacts to `data/processed/calibration_metrics.parquet`, `data/processed/calibration_summary_per_class.parquet`, `data/processed/reliability_diagram_data.parquet`, and `data/processed/brier_trend_chronological.parquet`.
+
+**Alternatives considered:**
+1. Using Expected Calibration Error (ECE) as the primary evaluation metric: Rejected because ECE is not a proper scoring rule, depends heavily on arbitrary bin-width choices, and can be gamed or distorted by sparse bin occupancy (e.g. draws heavily clustered in narrow probability bands). Multiclass Brier score and log loss strictly incentivize honest probability forecasting.
+2. Performing probability recalibration inside Task 5.1: Rejected to preserve strict pipeline stage modularity. Task 5.1 serves as the pre-calibration baseline diagnostic; recalibration via Platt scaling and isotonic regression is strictly deferred to Task 5.2.
+3. Evaluating in-sample full-fit predictions: Rejected per repository walk-forward rules (CONVENTIONS Rule 4). All calibration metrics are computed exclusively on the 560 strictly out-of-fold chronological predictions.
+
+**Rationale:** The OOF ensemble exhibits strong overall calibration with multiclass Brier score `0.612993`, log loss `1.023682`, classification accuracy `50.71%`, and macro ECE `0.031986`. Per-class one-vs-rest analysis reveals subtle structural tendencies: home win probabilities show ECE `0.0405` (slight underconfidence relative to actual 42.5% frequency), draw probabilities show ECE `0.0251` (tight clustering between 0.15 and 0.35 across 4 non-empty bins), and away win probabilities show ECE `0.0304` (slight overconfidence relative to actual 32.5% frequency). The monthly chronological Brier trend confirms stable performance over time with no temporal degradation.
+
 ## 2026-10-10 — OOF MC/XGBoost Ensemble Selection
 
 **Decision:** Evaluate MC-only, full 51-feature XGBoost, context-only

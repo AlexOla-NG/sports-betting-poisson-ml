@@ -275,9 +275,9 @@ cross-join all players against all fixtures.
 - Output: `data/processed/calibration_metrics.parquet`, reliability diagram plot.
 
 **Acceptance criteria:**
-- [ ] Module tested against known Brier score examples.
-- [ ] Notebook shows reliability diagram, Brier score trend over time.
-- [ ] JUSTIFICATION entry for metric choices.
+- [x] Module tested against known Brier score examples.
+- [x] Notebook shows reliability diagram, Brier score trend over time.
+- [x] JUSTIFICATION entry for metric choices.
 
 ---
 
