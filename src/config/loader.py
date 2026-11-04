@@ -87,3 +87,11 @@ def get_walk_forward_params(config: dict[str, Any]) -> tuple[int, int]:
     """Return (initial_train_size, step_size) for walk-forward validation."""
     eval_cfg = config.get("evaluation", {})
     return eval_cfg.get("initial_train_size", 200), eval_cfg.get("step_size", 38)
+
+
+def get_recalibration_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Return recalibration configuration dictionary.
+
+    Pipeline stage: 07_evaluation, Task 5.2.
+    """
+    return config.get("recalibration", {})

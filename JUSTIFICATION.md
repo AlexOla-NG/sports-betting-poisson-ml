@@ -4,6 +4,20 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-11-04 — Task 5.2 Temporally Evaluated Probability Recalibration
+
+**Decision:** Implement `src/evaluation/recalibration.py`, `notebooks/07_evaluation/02_recalibration.ipynb`, and `tests/evaluation/test_recalibration.py` to evaluate probability recalibration via date-safe expanding temporal splits (initial calibration size 200, block size 50, 7 folds, 360 forward-evaluated fixtures). Compare raw probabilities (`identity`), One-vs-Rest Platt scaling (`sigmoid_ovr`), and One-vs-Rest Isotonic regression (`isotonic_ovr`). Apply a conservative adoption rule requiring pooled Brier improvement ($< -10^{-12}$), log-loss non-deterioration ($\le +10^{-12}$), and majority fold wins ($> 3/7$ folds). Under this rule, **retain `identity`** (raw ensemble probabilities) as the provisionally selected method. Persist artifacts to `recalibration_fold_metrics.parquet`, `recalibration_comparison.parquet`, `recalibration_reliability_data.parquet`, `recalibration_forward_predictions.parquet`, and `recalibrated_probabilities.parquet`.
+
+**Alternatives considered:**
+1. Adopting `sigmoid_ovr` based on small margin improvements in individual folds (Folds 1 and 6): Rejected. Across all 360 forward fixtures, `sigmoid_ovr` worsened pooled Brier score ($0.623390$ vs $0.620044$, $\Delta = +0.003346$), worsened log loss ($1.038297$ vs $1.032383$, $\Delta = +0.005914$), and won only 2 of 7 folds ($28.6\%$). Adopting an unproven post-hoc calibrator risks introducing sample variance into downstream betting simulations.
+2. Adopting `isotonic_ovr`: Rejected. Isotonic regression suffered severely from limited fitting samples ($200$ to $504$ matches per fold), producing step functions that overfitted calibration sets and degraded forward out-of-fold log loss ($1.148308$ vs $1.032383$, $\Delta = +0.115926$) and Brier ($0.632600$ vs $0.620044$), winning only 1 of 7 folds ($14.3\%$).
+3. Evaluating recalibration in-sample or via random cross-validation: Rejected per repository walk-forward rules (CONVENTIONS Rule 4). All calibrators must be trained strictly on prior dates and evaluated out-of-fold on future dates with `max(train_date) < min(eval_date)`.
+
+**Rationale & Key Limitations:**
+- **Conditional Evaluation:** The 80/20 XGBoost/Monte Carlo ensemble blend was previously selected across the full 560-fixture OOF set in Task 4.3. The temporal recalibration evaluation conducted here is conditional on that already-selected blend; it is not an untouched end-to-end pipeline evaluation.
+- **Comparison Period Reuse:** Calibration method selection uses the 360 forward-evaluation fixtures. Independent confirmation will require subsequent untouched fixtures or a nested temporal evaluation protocol.
+- **Empirical Retain Policy:** Post-hoc calibration on small-sample football match prediction folds frequently overfits. Because neither candidate earned adoption under conservative criteria, retaining raw probabilities protects downstream betting and expected-value analysis from calibration-induced noise.
+
 ## 2026-11-02 — Task 5.1 Calibration Evaluation Implementation
 
 **Decision:** Implement `src/evaluation/calibration.py`, `notebooks/07_evaluation/01_calibration.ipynb`, and `tests/evaluation/test_calibration.py` to evaluate the calibration of the selected out-of-fold (OOF) ensemble model (`blend_context`, 80% context-XGBoost / 20% Monte Carlo, 560 fixtures). Use strictly proper scoring rules (multiclass Brier score and multi-class log loss) as primary optimization and evaluation metrics, supplemented by 10-bin one-vs-rest reliability diagrams, Expected Calibration Error (ECE), and chronological monthly Brier trend diagnostics. Persist evaluation artifacts to `data/processed/calibration_metrics.parquet`, `data/processed/calibration_summary_per_class.parquet`, `data/processed/reliability_diagram_data.parquet`, and `data/processed/brier_trend_chronological.parquet`.

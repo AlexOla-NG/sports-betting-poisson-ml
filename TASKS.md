@@ -293,9 +293,9 @@ cross-join all players against all fixtures.
 - Output: `data/processed/recalibrated_probabilities.parquet`.
 
 **Acceptance criteria:**
-- [ ] Module tested on synthetic miscalibrated data.
-- [ ] Notebook compares before/after Brier scores.
-- [ ] JUSTIFICATION entry for recalibration method choice.
+- [x] Module tested on synthetic miscalibrated data.
+- [x] Notebook compares before/after Brier scores.
+- [x] JUSTIFICATION entry for recalibration method choice.
 
 ---
 

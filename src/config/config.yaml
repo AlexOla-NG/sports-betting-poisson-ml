@@ -75,6 +75,28 @@ evaluation:
   initial_train_size: 200
   step_size: 38
 
+recalibration:
+  initial_calibration_size: 200
+  evaluation_block_size: 50
+  methods:
+    - "identity"
+    - "sigmoid_ovr"
+    - "isotonic_ovr"
+  reliability_bins_per_class: 10
+  probability_tolerance: 0.000000000001
+  numerical_selection_tolerance: 0.000000000001
+  sigmoid:
+    solver: "lbfgs"
+    C: 1000000000.0
+    fit_intercept: true
+    max_iter: 1000
+    random_state: 42
+  isotonic:
+    increasing: true
+    y_min: 0.0
+    y_max: 1.0
+    out_of_bounds: "clip"
+
 ingestion:
   soccerdata:
     league: "ENG-Premier League"
