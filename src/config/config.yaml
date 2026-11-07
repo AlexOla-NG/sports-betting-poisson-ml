@@ -132,6 +132,13 @@ prediction:
     - "elo_home"
     - "elo_away"
     - "elo_diff"
+  fbref_fallback:
+    pipeline_version: "fbref_fallback_v1"
+    training_cutoff: "2026-05-24"
+    cold_start_points: 1.0
+    cold_start_goals: 1.35
+    cold_start_rest_days: 0.0
+    cold_start_h2h_rate: 0.5
 
 ingestion:
   soccerdata:

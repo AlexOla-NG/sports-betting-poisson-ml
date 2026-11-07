@@ -339,6 +339,10 @@ then generate usable forecasts for upcoming fixtures. No dashboard is required.
 
 #### 5.3b — Frozen-Model Evaluation on Recent Completed Matches
 
+**FBref fallback status:** Implemented separately as `fbref_fallback_v1` for
+offline newer-completed-match evaluation. The original xG-based specification
+remains blocked by unavailable current-season xG and is not replaced.
+
 **Requirements:**
 - Initial proposed historical training cutoff: 2026-05-24 (end of reported development history).
   Confirm against actual data; store it in config rather than hardcoding function logic.
@@ -367,13 +371,13 @@ then generate usable forecasts for upcoming fixtures. No dashboard is required.
 - `data/processed/recent_match_metrics.parquet`
 - A versioned fitted model and metadata in the repository's existing artifact location.
 
-**Acceptance criteria:**
-- [ ] Fixed training cutoff and evaluation scope recorded before scoring.
-- [ ] Model, feature schema, class mapping, and metadata saved and reloadable.
-- [ ] Predictions use only information available at each historical cutoff.
-- [ ] Fixture-level predictions and actuals join one-to-one; exclusions are explicit.
-- [ ] Saved predictions reproduce reported metrics.
-- [ ] Recent results are reported honestly, without retuning or implying guaranteed accuracy.
+**Acceptance criteria for the FBref fallback only:**
+- [x] Fixed training cutoff and evaluation scope recorded before scoring.
+- [x] Model, feature schema, class mapping, and metadata saved and reloadable.
+- [x] Predictions use only information available at each historical cutoff.
+- [x] Fixture-level predictions and actuals join one-to-one; exclusions are explicit.
+- [x] Saved predictions reproduce reported metrics.
+- [x] Recent results are reported honestly, without retuning or implying guaranteed accuracy.
 
 #### 5.3c — Upcoming-Fixture Inference
 

@@ -21,6 +21,7 @@ sports-betting/
 │   ├── simulation/
 │   ├── ml/
 │   ├── evaluation/
+│   ├── prediction/     # Versioned recent-match and inference helpers
 │   └── config/         # Configuration loader (reads src/config/config.yaml)
 ├── notebooks/         # .ipynb notebooks, one per pipeline stage/task
 │   ├── 01_ingestion/
@@ -29,7 +30,8 @@ sports-betting/
 │   ├── 04_adjustments/
 │   ├── 05_simulation/
 │   ├── 06_ml/
-│   └── 07_evaluation/
+│   ├── 07_evaluation/
+│   └── 08_prediction/
 ├── tests/             # pytest unit tests for src/, mirroring structure
 ├── config/            # Tunable hyperparameters (YAML)
 ├── data/              # raw/ and processed/ data, gitignored

@@ -4,6 +4,25 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-11-07 — Separately Versioned FBref-Only Task 5.3b Fallback
+**Decision:** Add `fbref_fallback_v1` as a non-production recent-match evaluation
+path using only FBref fixture dates, teams, fixture weeks, and completed goals.
+Its ordered 15-feature schema contains rolling points, goals for/against,
+home-away differences, rest days, head-to-head rate/count, and fixture week.
+
+**Alternatives considered:** Waiting for Understat xG, mixing FBref and Understat
+features, substituting missing xG with zero, or reusing the legacy xG-based
+model/artifacts. These were rejected because current-season FBref schedule data
+has no xG and source consistency is not established.
+
+**Rationale:** The fallback is explicitly versioned and excludes xG, player
+availability, Elo, Poisson/MC columns, and current-match statistics. It freezes
+the configured XGBoost parameters at the verified `2026-05-24` cutoff, uses
+strict earlier-date history, and evaluates XGBoost-only, safe goal-based MC-only,
+and fixed 80/20 candidates on the same newer completed fixtures. It does not
+select production weights, generate upcoming forecasts, or alter legacy
+artifacts.
+
 ## 2026-11-07 — Prompt 2 Pre-Match-Safe Absence Policy
 
 **Decision:** Add the versioned `prediction_v2` configuration with

@@ -105,3 +105,8 @@ def get_prediction_config(config: dict[str, Any]) -> dict[str, Any]:
 def get_prediction_feature_schema(config: dict[str, Any]) -> list[str]:
     """Return the ordered feature schema selected for new predictions."""
     return list(get_prediction_config(config)["feature_columns"])
+
+
+def get_fbref_fallback_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Return the separately versioned FBref-only fallback configuration."""
+    return dict(get_prediction_config(config)["fbref_fallback"])
