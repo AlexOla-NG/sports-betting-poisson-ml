@@ -299,23 +299,163 @@ cross-join all players against all fixtures.
 
 ---
 
-### P3 — Task 5.3: Dashboard (Future)
-**Notebook:** N/A (Streamlit app)  
-**Module:** `dashboard/app.py`  
-**Tests:** `tests/dashboard/test_app.py`
+### P2 — Task 5.3: Recent-Match Evaluation & Upcoming-Fixture Prediction
+**Status:** Planned — capability audit is the immediate next action.
+**Proposed notebook:** `notebooks/08_prediction/01_recent_and_upcoming.ipynb`  
+**Proposed module:** `src/prediction/predict_fixtures.py`  
+**Proposed tests:** `tests/prediction/test_predict_fixtures.py`
 
-**Goal:** Build a Streamlit dashboard showing live ratings, predictions, calibration.
+Paths are proposed, not claims that these files already exist. Adapt to repository
+conventions and reuse existing ingestion, features, ratings, simulation, and
+model functions. Keep reusable logic in tested modules and orchestration in
+the notebook. Do not create a parallel modeling pipeline.
+
+**Goal:** Evaluate the frozen selected specification on newer completed matches,
+then generate usable forecasts for upcoming fixtures. No dashboard is required.
+
+#### 5.3a — Repository & Data Capability Audit (run first)
 
 **Requirements:**
-- Display current team ratings, upcoming gameweek predictions, Brier score trend.
-- Pull from `data/processed/` Parquet files.
+- Inspect repository conventions, config loader, ingestion interfaces, and saved artifacts.
+- Report the latest raw/processed match dates and available seasons.
+- Verify whether the current provider supports newer results and scheduled fixtures;
+  do not assume live availability or introduce a replacement provider silently.
+- Determine whether a fitted context-only XGBoost model exists, or only OOF predictions.
+- Locate the exact selected feature list, order, preprocessing settings, and model parameters.
+  Do not reconstruct the context-only schema by an ad hoc exclusion list.
+- Check whether unplayed rows survive ingestion and feature generation with missing
+  outcomes, goals, xG, and targets.
+- Verify pre-match generation of ratings, expected goals, MC probabilities, and other inputs.
+- Audit historical availability of absence inputs. A missing appearance in the match
+  being predicted must not be treated as pre-match evidence of an absence.
+- Identify promoted/new teams, insufficient histories, postponed matches, and team-ID mismatches.
+- Report blockers and the smallest required implementation changes before proceeding.
 
 **Acceptance criteria:**
-- [ ] App runs locally, displays all three components.
-- [ ] Basic tests for app rendering.
-- [ ] JUSTIFICATION entry for dashboard design.
+- [ ] Audit summary recorded in the notebook with actual schemas, dates, artifacts, and gaps.
+- [ ] Data source supports both completed and upcoming fixtures, or a blocker is documented.
+- [ ] Exact context-only feature schema and training specification identified.
+- [ ] Historical/as-of availability limitations are explicit; unresolved inputs are not silently fabricated.
+
+#### 5.3b — Frozen-Model Evaluation on Recent Completed Matches
+
+**Requirements:**
+- Initial proposed historical training cutoff: 2026-05-24 (end of reported development history).
+  Confirm against actual data; store it in config rather than hardcoding function logic.
+- Select an available completed-match period after the cutoff and record its dates
+  before inspecting performance. Verify whether these fixtures are genuinely unused
+  in model/feature/weight selection; otherwise label evaluation accordingly.
+- Load a matching fitted model, or fit the fixed context-XGBoost specification using
+  only eligible completed training fixtures through the cutoff. Save its feature schema,
+  class mapping, config snapshot, training cutoff, and model identifier.
+- Freeze XGBoost fitted parameters during this first recent-match evaluation.
+- Generate predictions chronologically. Rolling state may update from earlier completed
+  games, but no match may use its own result or future data.
+- Keep same-date fixtures atomic if reliable kickoff/result-availability times are unavailable.
+- Do not insert historical results into prediction inputs; attach evaluation targets only
+  after forecasts are generated. Updating history after a completed block is allowed.
+- Reconstruct pre-match inputs as of each prediction cutoff, including ratings and
+  availability information. If historical inputs cannot be reconstructed, stop or
+  explicitly document a proposed fallback for approval; do not silently change the model.
+- Use the selected 80/20 blend and identity post-processing unchanged.
+- Report fixture count, exclusions/reasons, dates, accuracy, multiclass summed Brier,
+  and log loss; display fixture-level probabilities and actual outcomes.
+- Do not tune features, blend weights, calibration, or model settings on this evaluation period.
+
+**Proposed outputs:**
+- `data/processed/recent_match_predictions.parquet`
+- `data/processed/recent_match_metrics.parquet`
+- A versioned fitted model and metadata in the repository's existing artifact location.
+
+**Acceptance criteria:**
+- [ ] Fixed training cutoff and evaluation scope recorded before scoring.
+- [ ] Model, feature schema, class mapping, and metadata saved and reloadable.
+- [ ] Predictions use only information available at each historical cutoff.
+- [ ] Fixture-level predictions and actuals join one-to-one; exclusions are explicit.
+- [ ] Saved predictions reproduce reported metrics.
+- [ ] Recent results are reported honestly, without retuning or implying guaranteed accuracy.
+
+#### 5.3c — Upcoming-Fixture Inference
+
+**Requirements:**
+- After recording the recent evaluation, fit a separate current-model version on all
+  eligible completed data through a declared current training cutoff, using the same
+  selected specification. Preserve the historical evaluation model and outputs.
+- Fetch scheduled fixtures for a configurable date range or upcoming gameweek.
+- Use the same feature transformations and ordered schema as training.
+- Keep unplayed fixture targets/results missing; do not drop them for lacking outcomes.
+- Build features only from history available at the declared prediction/data cutoff.
+- Do not allow one upcoming fixture to supply invented results or statistics to another.
+- Validate team mapping and history; flag or stop on unsupported fixtures rather than
+  silently substituting ratings, injuries, or features.
+- Produce XGBoost and MC probabilities and the fixed 80/20 blended prediction.
+- Display fixture, kickoff/date, home/draw/away probabilities, and highest-probability
+  outcome. Do not invent an additional confidence score or betting recommendation.
+- Save model identifier, generation timestamp, training cutoff, data cutoff, class mapping,
+  blend metadata, and data-quality warnings with traceable fixture IDs.
+- Use timezone-aware timestamps when available; document date-only source limitations.
+
+**Proposed outputs:**
+- `data/processed/upcoming_predictions.parquet` — latest forecast view.
+- Immutable, run-versioned prediction snapshots under an agreed processed-data subdirectory.
+
+**Acceptance criteria:**
+- [ ] Upcoming fixtures survive inference with no target values.
+- [ ] Valid finite, non-negative three-class probabilities sum to one within tolerance.
+- [ ] Feature order matches the fitted model's saved schema exactly.
+- [ ] Current and historical model versions are distinct and traceable.
+- [ ] Forecast table is usable locally in the notebook; no UI dependency.
+- [ ] Snapshot is saved before results become available and is not overwritten by later runs.
+
+#### 5.3d — Evaluate Saved Forecasts After Matches Finish
+
+**Requirements:**
+- Join actual outcomes onto saved pre-match snapshots by stable fixture ID.
+- Score the original saved forecast, not a forecast regenerated after the result.
+- Define which snapshot is evaluated when multiple pre-match forecasts exist.
+- Leave unplayed/postponed fixtures unscored and report their status.
+- Preserve original probabilities, timestamps, and model metadata.
+
+**Acceptance criteria:**
+- [ ] Completed forecast snapshots can be scored without rerunning inference.
+- [ ] Unplayed fixtures are excluded from scoring with explicit counts.
+- [ ] Duplicate snapshot selection and fixture reconciliation rules are deterministic.
+
+#### Task 5.3 — Shared Quality Gates
+
+- [ ] Unit tests use deterministic synthetic data and mocked/cached provider responses.
+- [ ] Tests cover chronological cutoffs, same-date boundaries, upcoming null targets,
+      exact feature order, save/load prediction parity, unknown teams, insufficient history,
+      probability integrity, and outcome/snapshot alignment.
+- [ ] Notebook executes with `pytest --nbval-lax`; live-network cells are skipped in CI.
+- [ ] Focused tests, full suite, and `git diff --check` pass.
+- [ ] `JUSTIFICATION.md` records fixed-model evaluation, as-of constraints, current-model
+      refitting, missing-data policies, and snapshot design using actual implementation details.
+- [ ] README documents how to refresh data, evaluate recent fixtures, and forecast upcoming games.
+- [ ] Mark Task 5.3 complete only after both recent-match evaluation and upcoming inference work.
 
 ---
+
+### P3 — Task 5.4: Dashboard (Deferred; formerly Task 5.3)
+**Status:** Deferred — not a dependency for Task 5.3.
+**Potential module:** `dashboard/app.py`  
+**Potential tests:** `tests/dashboard/test_app.py`
+
+**Goal:** Optionally present validated ratings, forecasts, and evaluation history in a UI.
+
+**Requirements:**
+- Decide whether a Streamlit dashboard is useful only after the notebook prediction workflow works.
+- If approved, read existing processed artifacts; do not duplicate model or feature logic.
+- Display current team ratings, upcoming predictions, Brier trend, and data/model freshness.
+
+**Acceptance criteria (only if activated):**
+- [ ] User confirms a dashboard is wanted.
+- [ ] App runs locally and displays the agreed components.
+- [ ] Basic rendering tests pass.
+- [ ] JUSTIFICATION entry explains dashboard design.
+
+---
+
 
 ## Summary by Priority
 
@@ -323,7 +463,7 @@ cross-join all players against all fixtures.
 |----------|-------|
 | P0 | 1.1 (Ingestion via soccerdata), 1.2 (Cleaning), 1.3 (Poisson ratings) |
 | P1 | 2.1 (Absence classification), 2.2 (λ adjustment), 3.1 (Scoreline matrix), 3.2 (Monte Carlo) |
-| P2 | 4.1 (Feature table), 4.2 (XGBoost), 4.3 (Ensemble), 5.1 (Calibration), 5.2 (Recalibration) |
-| P3 | 5.3 (Dashboard) |
+| P2 | 4.1 (Feature table), 4.2 (XGBoost), 4.3 (Ensemble), 5.1 (Calibration evaluation), 5.2 (Recalibration experiment), 5.3 (Recent evaluation & upcoming prediction) |
+| P3 | 5.4 (Optional dashboard — deferred) |
 
 Start with P0 tasks in order — each depends on the previous one's output.
