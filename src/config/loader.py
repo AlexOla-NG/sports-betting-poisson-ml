@@ -95,3 +95,13 @@ def get_recalibration_config(config: dict[str, Any]) -> dict[str, Any]:
     Pipeline stage: 07_evaluation, Task 5.2.
     """
     return config.get("recalibration", {})
+
+
+def get_prediction_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Return the versioned prediction-pipeline configuration."""
+    return config.get("prediction", {})
+
+
+def get_prediction_feature_schema(config: dict[str, Any]) -> list[str]:
+    """Return the ordered feature schema selected for new predictions."""
+    return list(get_prediction_config(config)["feature_columns"])

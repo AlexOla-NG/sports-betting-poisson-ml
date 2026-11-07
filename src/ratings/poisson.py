@@ -186,7 +186,7 @@ def compute_rolling_ratings(
     df = fixtures_df.copy()
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").reset_index(drop=True)
+    df = df.sort_values(["date", "fixture_id"]).reset_index(drop=True)
 
     home_att_list = []
     home_def_list = []
@@ -203,8 +203,8 @@ def compute_rolling_ratings(
         home_team = row["home_team"]
         away_team = row["away_team"]
 
-        # Past fixtures strictly prior to current match (idx)
-        past_fixtures = df.iloc[:idx].copy()
+        # Date-only sources cannot establish kickoff order within a date.
+        past_fixtures = df[df["date"] < row["date"]].copy()
 
         if idx == 0 or past_fixtures.empty:
             # Match 1: Cold start default ratings

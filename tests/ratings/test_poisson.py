@@ -81,6 +81,25 @@ def test_compute_rolling_ratings_enforces_shift_one_no_leakage():
     assert att_before_f3 > att_before_f2
 
 
+def test_compute_rolling_ratings_excludes_same_date_results():
+    fixtures = pd.DataFrame(
+        {
+            "fixture_id": ["prior", "same-date", "later"],
+            "date": ["2024-08-16", "2024-08-23", "2024-08-23"],
+            "home_team": ["Arsenal", "Arsenal", "Chelsea"],
+            "away_team": ["Wolves", "Chelsea", "Arsenal"],
+            "home_goals": [1, 5, 0],
+            "away_goals": [0, 0, 1],
+        }
+    )
+
+    ratings = compute_rolling_ratings(fixtures, window=2)
+
+    same_date = ratings.loc[ratings["fixture_id"] == "same-date"].iloc[0]
+    later = ratings.loc[ratings["fixture_id"] == "later"].iloc[0]
+    assert same_date["away_attack_rating"] == later["away_attack_rating"]
+
+
 def test_regularized_fit_handles_zero_conceded_team_without_zero_ratings():
     fixtures = pd.DataFrame(
         {

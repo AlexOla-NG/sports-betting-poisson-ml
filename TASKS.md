@@ -332,10 +332,10 @@ then generate usable forecasts for upcoming fixtures. No dashboard is required.
 - Report blockers and the smallest required implementation changes before proceeding.
 
 **Acceptance criteria:**
-- [ ] Audit summary recorded in the notebook with actual schemas, dates, artifacts, and gaps.
-- [ ] Data source supports both completed and upcoming fixtures, or a blocker is documented.
-- [ ] Exact context-only feature schema and training specification identified.
-- [ ] Historical/as-of availability limitations are explicit; unresolved inputs are not silently fabricated.
+- [x] Audit summary recorded in the notebook with actual schemas, dates, artifacts, and gaps.
+- [x] Data source supports both completed and upcoming fixtures, or a blocker is documented.
+- [x] Exact context-only feature schema and training specification identified.
+- [x] Historical/as-of availability limitations are explicit; unresolved inputs are not silently fabricated.
 
 #### 5.3b — Frozen-Model Evaluation on Recent Completed Matches
 
@@ -423,6 +423,14 @@ then generate usable forecasts for upcoming fixtures. No dashboard is required.
 
 #### Task 5.3 — Shared Quality Gates
 
+- [x] Prompt 2 policy path uses the versioned
+      `disabled_no_verified_prematch_data` absence policy consistently for
+      historical reconstruction and prospective preparation: zero applied
+      counts, base-equal adjusted lambdas, and MC inputs from those safe
+      lambdas. Legacy absence adjustment remains available when the policy is
+      not selected.
+- [x] Prompt 2 feature/rating history protections exclude same-date results
+      when only date-level ordering is available.
 - [ ] Unit tests use deterministic synthetic data and mocked/cached provider responses.
 - [ ] Tests cover chronological cutoffs, same-date boundaries, upcoming null targets,
       exact feature order, save/load prediction parity, unknown teams, insufficient history,

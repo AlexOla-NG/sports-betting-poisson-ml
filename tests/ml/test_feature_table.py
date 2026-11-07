@@ -69,6 +69,31 @@ def test_compute_head_to_head_features():
     assert h2h_df.loc[1, "h2h_match_count"] == 1
 
 
+def test_rolling_features_exclude_same_date_results():
+    fixtures = pd.DataFrame(
+        {
+            "fixture_id": ["prior", "same-date-1", "same-date-2", "later"],
+            "date": ["2024-08-16", "2024-08-23", "2024-08-23", "2024-08-30"],
+            "home_team": ["Arsenal", "Arsenal", "Arsenal", "Chelsea"],
+            "away_team": ["Chelsea", "Everton", "Wolves", "Arsenal"],
+            "home_goals": [1, 5, 7, 0],
+            "away_goals": [0, 0, 0, 1],
+            "home_xg": [1.0, 5.0, 7.0, 0.2],
+            "away_xg": [0.2, 0.1, 0.1, 0.4],
+        }
+    )
+
+    rolling = build_rolling_team_features(
+        fixtures, points_window=5, goals_window=5, xg_for_window=8, xg_against_window=8
+    )
+
+    same_date = rolling[rolling["fixture_id"].isin(["same-date-1", "same-date-2"])]
+    assert same_date["home_goals_form"].tolist() == [1.0, 1.0]
+
+    later = rolling.loc[rolling["fixture_id"] == "later"].iloc[0]
+    assert later["away_goals_form"] == 4.333333333333333
+
+
 def test_construct_feature_table_differentials_and_cold_start():
     """Test full feature table construction, diffs, and preservation of cold-start rows."""
     df_clean = pd.DataFrame(
@@ -153,3 +178,64 @@ def test_construct_feature_table_differentials_and_cold_start():
     assert "is_fallback_rating_home" in ft.columns
     assert "is_fallback_rating_away" in ft.columns
     assert isinstance(ft.loc[0, "is_fallback_rating_home"], (bool, np.bool_))
+
+
+def test_construct_feature_table_preserves_upcoming_fixture_without_target():
+    clean = pd.DataFrame(
+        {
+            "fixture_id": ["upcoming"],
+            "league": ["ENG-Premier League"],
+            "season": ["2627"],
+            "week": [12],
+            "date": ["2026-11-07"],
+            "home_team": ["Arsenal"],
+            "away_team": ["Chelsea"],
+            "home_goals": [np.nan],
+            "away_goals": [np.nan],
+            "home_xg": [np.nan],
+            "away_xg": [np.nan],
+            "is_xg_missing": [True],
+        }
+    )
+    ratings = pd.DataFrame(
+        {
+            "fixture_id": ["upcoming"],
+            "home_attack_rating": [1.0],
+            "home_defense_rating": [1.0],
+            "away_attack_rating": [1.0],
+            "away_defense_rating": [1.0],
+            "expected_home_goals": [1.5],
+            "expected_away_goals": [1.2],
+            "is_fallback_rating": [False],
+        }
+    )
+    lambdas = pd.DataFrame(
+        {
+            "fixture_id": ["upcoming"],
+            "base_home_lambda": [1.5],
+            "adjusted_home_lambda": [1.5],
+            "base_away_lambda": [1.2],
+            "adjusted_away_lambda": [1.2],
+            "num_home_absences_applied": [0],
+            "num_away_absences_applied": [0],
+        }
+    )
+    mc = pd.DataFrame(
+        {
+            "fixture_id": ["upcoming"],
+            "mc_prob_home_win": [0.4],
+            "mc_prob_draw": [0.3],
+            "mc_prob_away_win": [0.3],
+            "mc_prob_over_2_5": [0.5],
+            "mc_prob_under_2_5": [0.5],
+            "mc_prob_btts": [0.5],
+        }
+    )
+
+    features = construct_feature_table(clean, ratings, lambdas, mc)
+
+    assert len(features) == 1
+    assert pd.isna(features.loc[0, "target"])
+    assert pd.isna(features.loc[0, "target_encoded"])
+    assert features.loc[0, "num_home_absences_applied"] == 0
+    assert features.loc[0, "num_away_absences_applied"] == 0

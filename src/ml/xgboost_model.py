@@ -59,6 +59,8 @@ POISSON_MC_FEATURES = frozenset(
         "mc_prob_btts",
     }
 )
+PREDICTION_DIAGNOSTIC_FEATURES = frozenset({"is_xg_missing"})
+PREDICTION_FEATURE_SCHEMA = "context_v2_without_xg_availability"
 
 
 def generate_walk_forward_splits(
@@ -317,6 +319,45 @@ def get_feature_columns(
         exclude_cols = DEFAULT_EXCLUDE_COLUMNS
 
     return [col for col in df.columns if col not in exclude_cols]
+
+
+def get_prediction_feature_columns(df: pd.DataFrame) -> list[str]:
+    """Return the ordered 30-feature schema for the new prediction pipeline.
+
+    Pipeline Stage: 08_prediction. This derives the legacy context feature
+    order from the input table, then excludes xG availability metadata from
+    model inputs. ``is_xg_missing`` remains available on the feature table for
+    diagnostics but cannot affect prediction vectors.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Feature table containing the audited legacy feature columns.
+
+    Returns
+    -------
+    list[str]
+        Ordered prediction feature names.
+
+    Raises
+    ------
+    ValueError
+        If the derived schema does not contain exactly 30 features.
+    """
+    context_columns = [
+        column for column in get_feature_columns(df)
+        if column not in POISSON_MC_FEATURES
+    ]
+    prediction_columns = [
+        column for column in context_columns
+        if column not in PREDICTION_DIAGNOSTIC_FEATURES
+    ]
+    if len(context_columns) == 31 and len(prediction_columns) != 30:
+        raise ValueError(
+            "Prediction schema must contain 30 features after excluding "
+            "diagnostic xG availability metadata."
+        )
+    return prediction_columns
 
 
 def train_xgboost(

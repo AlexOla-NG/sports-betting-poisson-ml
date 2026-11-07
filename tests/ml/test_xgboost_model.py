@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.config.loader import get_prediction_feature_schema, load_config
 from src.ml.xgboost_model import (
     compute_multiclass_brier_score,
     compute_oof_permutation_importance,
@@ -17,8 +18,10 @@ from src.ml.xgboost_model import (
     generate_walk_forward_splits,
     get_feature_columns,
     load_model_artifact,
+    POISSON_MC_FEATURES,
     save_model_artifact,
     train_xgboost,
+    get_prediction_feature_columns,
 )
 
 
@@ -140,6 +143,74 @@ def test_get_feature_columns_filters_metadata_and_targets():
     assert "target_encoded" not in feature_cols
     assert "points_diff" in feature_cols
     assert "xg_diff" in feature_cols
+
+
+def test_prediction_schema_excludes_xg_availability_and_preserves_legacy_schema():
+    feature_table = pd.DataFrame(
+        {
+            "week": [1],
+            "is_xg_missing": [True],
+            "is_fallback_rating": [False],
+            "num_home_absences_applied": [0],
+            "num_away_absences_applied": [0],
+            **{feature: [0.0] for feature in [
+                "home_points_form", "away_points_form", "home_goals_form",
+                "away_goals_form", "home_goals_against_form",
+                "away_goals_against_form", "home_xg_for_form",
+                "away_xg_for_form", "home_xg_against_form",
+                "away_xg_against_form", "rest_days_home", "rest_days_away",
+                "h2h_home_win_rate", "h2h_match_count", "points_form_diff",
+                "goals_form_diff", "goals_against_form_diff", "xg_for_form_diff",
+                "xg_against_form_diff", "xg_diff", "rest_days_diff",
+                "is_fallback_rating_home", "is_fallback_rating_away",
+                "elo_home", "elo_away", "elo_diff",
+            ]},
+        }
+    )
+
+    legacy_context = [
+        column for column in get_feature_columns(feature_table)
+        if column not in POISSON_MC_FEATURES
+    ]
+    prediction_context = get_prediction_feature_columns(feature_table)
+
+    assert len(legacy_context) == 31
+    assert len(prediction_context) == 30
+    assert "is_xg_missing" in legacy_context
+    assert "is_xg_missing" not in prediction_context
+    assert prediction_context == [
+        column for column in legacy_context if column != "is_xg_missing"
+    ]
+    assert prediction_context == get_prediction_feature_schema(load_config())
+
+
+def test_prediction_schema_is_invariant_to_fixture_xg_flag():
+    feature_table = pd.DataFrame(
+        {
+            "week": [1, 1],
+            "is_xg_missing": [False, True],
+            **{
+                feature: [float(index), float(index)]
+                for index, feature in enumerate([
+                    "is_fallback_rating", "num_home_absences_applied",
+                    "num_away_absences_applied", "home_points_form",
+                    "away_points_form", "home_goals_form", "away_goals_form",
+                    "home_goals_against_form", "away_goals_against_form",
+                    "home_xg_for_form", "away_xg_for_form",
+                    "home_xg_against_form", "away_xg_against_form",
+                    "rest_days_home", "rest_days_away", "h2h_home_win_rate",
+                    "h2h_match_count", "points_form_diff", "goals_form_diff",
+                    "goals_against_form_diff", "xg_for_form_diff",
+                    "xg_against_form_diff", "xg_diff", "rest_days_diff",
+                    "is_fallback_rating_home", "is_fallback_rating_away",
+                    "elo_home", "elo_away", "elo_diff",
+                ])
+            },
+        }
+    )
+
+    columns = get_prediction_feature_columns(feature_table)
+    assert feature_table.loc[0, columns].to_numpy().tolist() == feature_table.loc[1, columns].to_numpy().tolist()
 
 
 def test_train_xgboost_synthetic_walk_forward_and_nan_handling(tmp_path: Path):

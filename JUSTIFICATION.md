@@ -4,6 +4,44 @@ This file records every significant design decision, the alternatives
 considered, and the reasoning behind the final choice. Update this file
 whenever a new feature is added or an existing design changes.
 
+## 2026-11-07 — Prompt 2 Pre-Match-Safe Absence Policy
+
+**Decision:** Add the versioned `prediction_v2` configuration with
+`absence_policy: disabled_no_verified_prematch_data`. When selected, lambda
+preparation ignores legacy appearance-derived absence rows, emits zero applied
+absence counts, and keeps adjusted lambdas equal to base lambdas. Monte Carlo
+therefore receives the safe base lambdas through the existing adjusted-lambda
+interface. Preserve the legacy adjustment path when this policy is absent.
+
+**Alternatives considered:** Reusing historical appearance-based absences for
+upcoming fixtures was rejected because those appearances are post-match
+evidence. Treating missing xG as zero, changing providers, or adding injury
+overrides was outside Prompt 2.
+
+**Rationale:** A single explicit policy selection keeps historical
+reconstruction and prospective preparation consistent without changing the
+selected ordered feature schema or legacy artifacts. Rolling features and
+Poisson ratings now use strict earlier-date history because date-only sources
+cannot establish same-day kickoff order.
+
+**Limitation:** The selected context schema still includes `is_xg_missing`,
+which is derived from the predicted fixture's own xG availability. This
+feature-integrity blocker is reported but intentionally not changed in Prompt 2.
+
+## 2026-11-07 — Prompt 2 New Prediction Feature Schema
+
+**Decision:** Define the new prediction schema
+`context_v2_without_xg_availability` by preserving the audited ordered
+context schema and excluding only `is_xg_missing`. The resulting schema has 30
+features. The excluded column remains diagnostic metadata, and the legacy
+31-feature selection remains available for historical artifacts and legacy
+analysis.
+
+**Rationale:** A fixture's own xG-availability flag is not pre-match evidence
+and can differ solely because the target fixture has post-match or provider
+coverage. Excluding it prevents that flag from changing new-pipeline model
+inputs without silently changing legacy schemas or persisted outputs.
+
 ## 2026-11-04 — Task 5.2 Temporally Evaluated Probability Recalibration
 
 **Decision:** Implement `src/evaluation/recalibration.py`, `notebooks/07_evaluation/02_recalibration.ipynb`, and `tests/evaluation/test_recalibration.py` to evaluate probability recalibration via date-safe expanding temporal splits (initial calibration size 200, block size 50, 7 folds, 360 forward-evaluated fixtures). Compare raw probabilities (`identity`), One-vs-Rest Platt scaling (`sigmoid_ovr`), and One-vs-Rest Isotonic regression (`isotonic_ovr`). Apply a conservative adoption rule requiring pooled Brier improvement ($< -10^{-12}$), log-loss non-deterioration ($\le +10^{-12}$), and majority fold wins ($> 3/7$ folds). Under this rule, **retain `identity`** (raw ensemble probabilities) as the provisionally selected method. Persist artifacts to `recalibration_fold_metrics.parquet`, `recalibration_comparison.parquet`, `recalibration_reliability_data.parquet`, `recalibration_forward_predictions.parquet`, and `recalibrated_probabilities.parquet`.

@@ -15,6 +15,15 @@ from src.processing.clean_features import standardize_team_name
 
 ATTACKING_GROUPS = frozenset({"MID", "FWD"})
 DEFENSIVE_GROUPS = frozenset({"GK", "DEF"})
+DISABLED_NO_VERIFIED_PREMATCH_DATA = "disabled_no_verified_prematch_data"
+
+
+def _absence_policy_is_disabled(config: dict[str, Any]) -> bool:
+    """Return whether the selected prediction path disables absence adjustments."""
+    return (
+        config.get("prediction", {}).get("absence_policy")
+        == DISABLED_NO_VERIFIED_PREMATCH_DATA
+    )
 
 
 def _absence_streak_positions(absences: pd.DataFrame) -> pd.Series:
@@ -153,6 +162,19 @@ def adjust_fixture_lambdas(
     Pipeline stage: 04_adjustments. FWD/MID absences reduce the affected
     team's lambda; GK/DEF absences increase the opponent's lambda.
     """
+    if _absence_policy_is_disabled(config):
+        return {
+            "fixture_id": fixture_id,
+            "home_team": home_team,
+            "away_team": away_team,
+            "base_home_lambda": float(base_home_lambda),
+            "adjusted_home_lambda": float(base_home_lambda),
+            "base_away_lambda": float(base_away_lambda),
+            "adjusted_away_lambda": float(base_away_lambda),
+            "num_home_absences_applied": 0,
+            "num_away_absences_applied": 0,
+        }
+
     target_date = pd.to_datetime(fixture_date)
     absence_dates = pd.to_datetime(absences["date"]).dt.normalize()
     fixture_absences = absences[
@@ -276,6 +298,35 @@ def build_adjusted_lambdas(
     missing = required_ratings.difference(ratings.columns)
     if missing:
         raise ValueError(f"Ratings data missing columns: {sorted(missing)}")
+
+    if _absence_policy_is_disabled(config):
+        output = ratings[
+            ["fixture_id", "home_team", "away_team", "expected_home_goals", "expected_away_goals"]
+        ].copy()
+        output = output.rename(
+            columns={
+                "expected_home_goals": "base_home_lambda",
+                "expected_away_goals": "base_away_lambda",
+            }
+        )
+        output["adjusted_home_lambda"] = output["base_home_lambda"].astype(float)
+        output["adjusted_away_lambda"] = output["base_away_lambda"].astype(float)
+        output["num_home_absences_applied"] = 0
+        output["num_away_absences_applied"] = 0
+        output.attrs["unmatched_absences"] = absences.copy()
+        return output[
+            [
+                "fixture_id",
+                "home_team",
+                "away_team",
+                "base_home_lambda",
+                "adjusted_home_lambda",
+                "base_away_lambda",
+                "adjusted_away_lambda",
+                "num_home_absences_applied",
+                "num_away_absences_applied",
+            ]
+        ]
 
     aligned_absences, unmatched_absences = _align_absences_to_ratings(ratings, absences)
     if not aligned_absences.empty:

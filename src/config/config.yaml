@@ -97,6 +97,42 @@ recalibration:
     y_max: 1.0
     out_of_bounds: "clip"
 
+prediction:
+  pipeline_version: "prediction_v2"
+  absence_policy: "disabled_no_verified_prematch_data"
+  feature_schema: "context_v2_without_xg_availability"
+  feature_columns:
+    - "week"
+    - "is_fallback_rating"
+    - "num_home_absences_applied"
+    - "num_away_absences_applied"
+    - "home_points_form"
+    - "away_points_form"
+    - "home_goals_form"
+    - "away_goals_form"
+    - "home_goals_against_form"
+    - "away_goals_against_form"
+    - "home_xg_for_form"
+    - "away_xg_for_form"
+    - "home_xg_against_form"
+    - "away_xg_against_form"
+    - "rest_days_home"
+    - "rest_days_away"
+    - "h2h_home_win_rate"
+    - "h2h_match_count"
+    - "points_form_diff"
+    - "goals_form_diff"
+    - "goals_against_form_diff"
+    - "xg_for_form_diff"
+    - "xg_against_form_diff"
+    - "xg_diff"
+    - "rest_days_diff"
+    - "is_fallback_rating_home"
+    - "is_fallback_rating_away"
+    - "elo_home"
+    - "elo_away"
+    - "elo_diff"
+
 ingestion:
   soccerdata:
     league: "ENG-Premier League"

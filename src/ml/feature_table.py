@@ -53,7 +53,7 @@ def build_rolling_team_features(
     """
     work_df = df.copy()
     work_df["date"] = pd.to_datetime(work_df["date"])
-    work_df = work_df.sort_values("date").reset_index(drop=True)
+    work_df = work_df.sort_values(["date", "fixture_id"]).reset_index(drop=True)
 
     team_matches = []
     for idx, row in work_df.iterrows():
@@ -94,28 +94,40 @@ def build_rolling_team_features(
         )
 
     tm_df = pd.DataFrame(team_matches)
-    tm_df = tm_df.sort_values(["team", "date"]).reset_index(drop=True)
+    tm_df = tm_df.sort_values(["team", "date", "fixture_id"]).reset_index(drop=True)
 
-    # Apply .shift(1) BEFORE rolling windows to guarantee non-leakage
-    tm_df["rolling_points_form"] = tm_df.groupby("team")["points"].transform(
-        lambda s: s.shift(1).rolling(points_window, min_periods=1).mean()
-    )
-    tm_df["rolling_goals_form"] = tm_df.groupby("team")["goals_for"].transform(
-        lambda s: s.shift(1).rolling(goals_window, min_periods=1).mean()
-    )
-    tm_df["rolling_goals_against_form"] = tm_df.groupby("team")["goals_against"].transform(
-        lambda s: s.shift(1).rolling(goals_window, min_periods=1).mean()
-    )
-    tm_df["rolling_xg_for_form"] = tm_df.groupby("team")["xg_for"].transform(
-        lambda s: s.shift(1).rolling(xg_for_window, min_periods=1).mean()
-    )
-    tm_df["rolling_xg_against_form"] = tm_df.groupby("team")["xg_against"].transform(
-        lambda s: s.shift(1).rolling(xg_against_window, min_periods=1).mean()
-    )
-
-    # Compute rest days strictly from prior date using .shift(1)
-    tm_df["prev_date"] = tm_df.groupby("team")["date"].shift(1)
-    tm_df["rest_days"] = (tm_df["date"] - tm_df["prev_date"]).dt.days
+    history_values: dict[str, list[float]] = {
+        "rolling_points_form": [],
+        "rolling_goals_form": [],
+        "rolling_goals_against_form": [],
+        "rolling_xg_for_form": [],
+        "rolling_xg_against_form": [],
+        "rest_days": [],
+    }
+    for _, row in tm_df.iterrows():
+        prior = tm_df[
+            (tm_df["team"] == row["team"]) & (tm_df["date"] < row["date"])
+        ].sort_values(["date", "fixture_id"])
+        history_values["rolling_points_form"].append(
+            prior["points"].tail(points_window).mean()
+        )
+        history_values["rolling_goals_form"].append(
+            prior["goals_for"].tail(goals_window).mean()
+        )
+        history_values["rolling_goals_against_form"].append(
+            prior["goals_against"].tail(goals_window).mean()
+        )
+        history_values["rolling_xg_for_form"].append(
+            prior["xg_for"].tail(xg_for_window).mean()
+        )
+        history_values["rolling_xg_against_form"].append(
+            prior["xg_against"].tail(xg_against_window).mean()
+        )
+        history_values["rest_days"].append(
+            np.nan if prior.empty else (row["date"] - prior["date"].max()).days
+        )
+    for column, values in history_values.items():
+        tm_df[column] = values
 
     # Split back to home and away per fixture
     home_tm = tm_df[tm_df["is_home"]].set_index("fixture_id")
@@ -159,6 +171,7 @@ def compute_head_to_head_features(
     """
     work_df = df.copy()
     work_df["date"] = pd.to_datetime(work_df["date"])
+    work_df = work_df.sort_values(["date", "fixture_id"]).reset_index(drop=True)
 
     h2h_rates = []
     h2h_counts = []

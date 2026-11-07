@@ -5,6 +5,7 @@ from src.adjustments.lambda_adjustment import (
     adjust_lambda,
     build_adjusted_lambdas,
 )
+from src.simulation.monte_carlo import run_monte_carlo_dataset
 
 
 CONFIG = {
@@ -13,6 +14,15 @@ CONFIG = {
         "injury_decay": 0.7,
         "min_absence_matches": 3,
     }
+}
+
+
+SAFE_CONFIG = {
+    **CONFIG,
+    "prediction": {
+        "pipeline_version": "prediction_v2",
+        "absence_policy": "disabled_no_verified_prematch_data",
+    },
 }
 
 
@@ -101,3 +111,78 @@ def test_build_adjusted_lambdas_reconciles_provider_fixture_ids():
     assert len(output) == 1
     assert output.loc[0, "num_home_absences_applied"] == 1
     assert output.attrs["unmatched_absences"].empty
+
+
+def test_disabled_absence_policy_uses_base_lambdas_and_zero_counts():
+    ratings = pd.DataFrame(
+        {
+            "fixture_id": ["f1", "f2"],
+            "date": pd.to_datetime(["2025-01-01", "2025-01-02"]),
+            "home_team": ["Newcastle United", "Arsenal"],
+            "away_team": ["Arsenal", "Newcastle United"],
+            "expected_home_goals": [1.5, 1.7],
+            "expected_away_goals": [1.2, 1.1],
+        }
+    )
+    absences = absence_rows(["FWD", "DEF"], fixture_ids=["f1", "f2"])
+
+    output = build_adjusted_lambdas(ratings, absences, SAFE_CONFIG)
+
+    assert output["num_home_absences_applied"].tolist() == [0, 0]
+    assert output["num_away_absences_applied"].tolist() == [0, 0]
+    assert output["adjusted_home_lambda"].tolist() == output["base_home_lambda"].tolist()
+    assert output["adjusted_away_lambda"].tolist() == output["base_away_lambda"].tolist()
+    assert output.attrs["unmatched_absences"].equals(absences)
+
+
+def test_legacy_absence_policy_remains_available():
+    ratings = pd.DataFrame(
+        {
+            "fixture_id": ["f1"],
+            "date": [pd.Timestamp("2025-01-01")],
+            "home_team": ["Newcastle United"],
+            "away_team": ["Arsenal"],
+            "expected_home_goals": [1.5],
+            "expected_away_goals": [1.2],
+        }
+    )
+    absences = absence_rows(["DEF"], fixture_ids=["f1"])
+
+    output = build_adjusted_lambdas(ratings, absences, CONFIG)
+
+    assert output.loc[0, "num_home_absences_applied"] == 1
+    assert output.loc[0, "adjusted_away_lambda"] == 1.44
+
+
+def test_monte_carlo_receives_safe_base_lambdas():
+    ratings = pd.DataFrame(
+        {
+            "fixture_id": ["f1"],
+            "date": [pd.Timestamp("2025-01-01")],
+            "home_team": ["Newcastle United"],
+            "away_team": ["Arsenal"],
+            "expected_home_goals": [1.5],
+            "expected_away_goals": [1.2],
+        }
+    )
+    safe_lambdas = build_adjusted_lambdas(
+        ratings, absence_rows(["FWD"], fixture_ids=["f1"]), SAFE_CONFIG
+    )
+
+    safe_mc = run_monte_carlo_dataset(
+        safe_lambdas, num_trials=2000, random_seed=42
+    )
+    base_mc = run_monte_carlo_dataset(
+        ratings.rename(
+            columns={
+                "expected_home_goals": "adjusted_home_lambda",
+                "expected_away_goals": "adjusted_away_lambda",
+            }
+        ),
+        num_trials=2000,
+        random_seed=42,
+    )
+
+    assert safe_mc["mc_prob_home_win"].tolist() == base_mc["mc_prob_home_win"].tolist()
+    assert safe_mc["mc_prob_draw"].tolist() == base_mc["mc_prob_draw"].tolist()
+    assert safe_mc["mc_prob_away_win"].tolist() == base_mc["mc_prob_away_win"].tolist()
